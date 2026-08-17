@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
             TastyRadioTheme {
                 RootScreen(
                     repository = app.repository,
+                    mixRepository = app.mixRepository,
                     mixer = app.mixer,
                     recorder = app.recorder,
                     search = app.search,

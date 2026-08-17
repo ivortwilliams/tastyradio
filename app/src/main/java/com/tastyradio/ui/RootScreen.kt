@@ -11,6 +11,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,7 +22,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.unit.dp
 import com.tastyradio.data.M3uExport
+import com.tastyradio.data.MixRepository
 import com.tastyradio.data.Settings
 import com.tastyradio.data.StationRepository
 import com.tastyradio.playback.Mixer
@@ -33,6 +42,7 @@ import kotlinx.coroutines.launch
 private enum class Tab(val label: String, val glyph: String) {
     /** Stations draws its own radio; the glyph here is unused for it. */
     Stations("Stations", ""),
+    Mixes("Mixes", "≡"),
     Search("Search", "⌕"),
     Settings("Settings", "⚙"),
 }
@@ -53,6 +63,7 @@ private enum class Tab(val label: String, val glyph: String) {
 @Composable
 fun RootScreen(
     repository: StationRepository,
+    mixRepository: MixRepository,
     mixer: Mixer,
     recorder: Recorder,
     search: SearchRepository,
@@ -62,7 +73,12 @@ fun RootScreen(
     var tab by remember { mutableStateOf(Tab.Stations) }
     var mixerExpanded by remember { mutableStateOf(false) }
     var showAddStation by remember { mutableStateOf(false) }
+    var showSaveMix by remember { mutableStateOf(false) }
+    /** Which saved mix is on air, so the Mixes tab can mark it. Cleared when the mix is changed. */
+    var liveMixName by remember { mutableStateOf<String?>(null) }
     val channels by mixer.channels.collectAsStateWithLifecycle()
+    val mixes by mixRepository.mixes.collectAsStateWithLifecycle(initialValue = emptyList())
+    val stations by repository.stations.collectAsStateWithLifecycle(initialValue = emptyList())
     val recording by recorder.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -112,6 +128,7 @@ fun RootScreen(
                     onStopAll = mixer::stopAll,
                     onRetry = mixer::retry,
                     onTone = mixer::setTone,
+                    onSaveMix = { showSaveMix = true },
                     recording = recording,
                     onToggleRecording = {
                         if (recording is Recorder.State.Recording) {
@@ -155,6 +172,53 @@ fun RootScreen(
                 channels = channels,
                 contentPadding = padding,
                 onNotify = notify,
+                // Touching a station by hand means you're no longer listening to the saved mix.
+                onMixChanged = { liveMixName = null },
+            )
+
+            Tab.Mixes -> MixesScreen(
+                mixes = mixes,
+                stations = stations,
+                liveMixName = liveMixName,
+                contentPadding = padding,
+                onPlay = { entry ->
+                    val byId = stations.associateBy { it.id }
+                    val presets = entry.channels.mapNotNull { channel ->
+                        byId[channel.stationId]?.let { station ->
+                            Mixer.Preset(
+                                station = station,
+                                fader = channel.fader,
+                                muted = channel.muted,
+                                tone = Mixer.Tone(
+                                    low = channel.toneLow,
+                                    mid = channel.toneMid,
+                                    high = channel.toneHigh,
+                                    filter = channel.toneFilter,
+                                ),
+                            )
+                        }
+                    }
+                    if (presets.isEmpty()) {
+                        notify("None of that mix's stations are in your collection any more.")
+                    } else {
+                        mixer.load(presets)
+                        liveMixName = entry.mix.name
+                        notify("Playing ${entry.mix.name}.")
+                    }
+                },
+                onRename = { mix, name ->
+                    scope.launch {
+                        mixRepository.rename(mix, name)
+                        if (liveMixName == mix.name) liveMixName = name.trim()
+                    }
+                },
+                onDelete = { mix ->
+                    scope.launch {
+                        mixRepository.delete(mix)
+                        if (liveMixName == mix.name) liveMixName = null
+                        notify("Deleted ${mix.name}.")
+                    }
+                },
             )
 
             Tab.Search -> SearchScreen(
@@ -239,6 +303,53 @@ fun RootScreen(
                 },
             )
         }
+    }
+
+    if (showSaveMix) {
+        // Prefilled with the station names, because that's what the mix is until you name it
+        // something better — and an unnamed mix you have to invent a title for doesn't get saved.
+        var name by remember { mutableStateOf(liveMixName ?: channels.joinToString(" + ") { it.station.name }) }
+        AlertDialog(
+            onDismissRequest = { showSaveMix = false },
+            title = { Text("Save this mix") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Saves the stations, their levels, mutes and tone. Using a name you " +
+                            "already have replaces that mix.",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        scope.launch {
+                            val saved = mixRepository.save(name, channels)
+                            liveMixName = name.trim()
+                            showSaveMix = false
+                            notify(
+                                if (saved == 0) {
+                                    "Nothing to save — add a station from your collection first."
+                                } else {
+                                    "Saved ${name.trim()} — $saved stations."
+                                }
+                            )
+                        }
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showSaveMix = false }) { Text("Cancel") } },
+        )
     }
 
     if (showAddStation) {

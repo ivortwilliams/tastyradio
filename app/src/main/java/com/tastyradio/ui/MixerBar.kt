@@ -64,6 +64,7 @@ fun MixerBar(
     recording: Recorder.State,
     onToggleRecording: () -> Unit,
     onTone: (String, Mixer.Tone) -> Unit,
+    onSaveMix: () -> Unit,
 ) {
     if (channels.isEmpty()) return
     // One channel's tone controls open at a time: four channels' worth at once would fill the
@@ -112,6 +113,15 @@ fun MixerBar(
                                 tone = channel.tone,
                                 onTone = { onTone(channel.key, it) },
                             )
+                        }
+                    }
+                    // Saving lives here because this is where you are when it finally sounds right.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = onSaveMix) {
+                            Text("Save mix", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     if (channels.size < Mixer.MAX_CHANNELS) {

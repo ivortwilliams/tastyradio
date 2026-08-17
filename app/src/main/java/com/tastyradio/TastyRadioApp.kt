@@ -6,6 +6,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.tastyradio.data.MixRepository
 import com.tastyradio.data.Settings
 import com.tastyradio.data.StationRepository
 import com.tastyradio.data.TastyDb
@@ -31,6 +32,7 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
 
     val database by lazy { TastyDb.build(this) }
     val repository by lazy { StationRepository(database.stations()) }
+    val mixRepository by lazy { MixRepository(database.mixes()) }
     val mixer by lazy { Mixer(this) }
     val recorder by lazy { Recorder(this) }
     val search by lazy { SearchRepository(this) }

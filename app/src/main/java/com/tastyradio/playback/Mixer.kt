@@ -188,6 +188,28 @@ class Mixer(private val context: Context) {
         if (players.isEmpty()) releaseFocusAndReceiver()
     }
 
+    /** A saved channel, ready to be put back exactly as it was. */
+    data class Preset(
+        val station: Station,
+        val fader: Float,
+        val muted: Boolean,
+        val tone: Tone,
+    )
+
+    /**
+     * Replaces the whole mix in one go. Loading a saved soundscape is "play this instead of what's
+     * on", not "add to it" — otherwise recalling a mix while something plays gives you neither.
+     */
+    fun load(presets: List<Preset>) {
+        stopAll()
+        for (preset in presets.take(MAX_CHANNELS)) {
+            if (!play(preset.station, preset.fader)) continue
+            val key = preset.station.channelKey()
+            setMuted(key, preset.muted)
+            setTone(key, preset.tone)
+        }
+    }
+
     fun stopAll() {
         watchdogs.values.forEach { it.cancel() }
         watchdogs.clear()

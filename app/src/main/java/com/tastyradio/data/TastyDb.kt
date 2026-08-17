@@ -8,10 +8,12 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
-@Database(entities = [Station::class], version = 3, exportSchema = false)
+@Database(entities = [Station::class, Mix::class, MixChannel::class], version = 4, exportSchema = false)
 abstract class TastyDb : RoomDatabase() {
 
     abstract fun stations(): StationDao
+
+    abstract fun mixes(): MixDao
 
     companion object {
         /**
@@ -35,9 +37,39 @@ abstract class TastyDb : RoomDatabase() {
             }
         }
 
+        /** Saved mixes: a set of stations with their levels and tone. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS mixes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS mix_channels (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        mixId INTEGER NOT NULL,
+                        stationId INTEGER NOT NULL,
+                        fader REAL NOT NULL,
+                        muted INTEGER NOT NULL,
+                        toneLow REAL NOT NULL,
+                        toneMid REAL NOT NULL,
+                        toneHigh REAL NOT NULL,
+                        toneFilter REAL NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun build(context: Context): TastyDb =
             Room.databaseBuilder(context, TastyDb::class.java, "tasty.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }
