@@ -121,6 +121,27 @@ bundled curated pack means the app is usable *while* this happens.
 If so, incremental refresh gets the weekly cost to near zero. Check before building the full-pull
 path as permanent.
 
+> ### Measured 2026-08-17, on the emulator
+>
+> | | |
+> |---|---|
+> | Stations indexed | **62,466** (API reports 62,450 + paging overlap) |
+> | Full sync: download → index → tag co-occurrence | **under 60 seconds** |
+> | Tags with learned neighbours | 624 |
+> | Index on disk | ~30 MB |
+>
+> Comfortably better than the estimates. The sizing table above stands.
+>
+> **⚠️ `/json/stations` silently caps at 1000 rows.** No error, no header, no indication — ask for
+> the corpus and you quietly get 1.6% of it and everything *looks* fine. The first sync built a
+> 998-station index and reported success. Paging with explicit `limit`/`offset` is mandatory;
+> `PAGE_SIZE` is 10,000, so the corpus is seven requests.
+>
+> **⚠️ Mirrors are dual-stack and IPv6 can be a dead end.** `de1` resolves to an AAAA address the
+> emulator cannot route to, and the sync died with `ConnectException`. The ingest now tries mirrors
+> in turn and the app sets `java.net.preferIPv6Addresses=false`. Any network without IPv6 would
+> have hit this, so it isn't only an emulator problem.
+
 ### Sync must be visible
 
 **Requirement, not a nice-to-have: the user can always see that a sync is happening, and when

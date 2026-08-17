@@ -8,17 +8,23 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tastyradio.data.StationRepository
 import com.tastyradio.playback.Mixer
+import com.tastyradio.record.Recorder
+import com.tastyradio.search.SearchRepository
 import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, val glyph: String) {
@@ -44,14 +50,42 @@ private enum class Tab(val label: String, val glyph: String) {
 fun RootScreen(
     repository: StationRepository,
     mixer: Mixer,
+    recorder: Recorder,
+    search: SearchRepository,
 ) {
     var tab by remember { mutableStateOf(Tab.Stations) }
     var mixerExpanded by remember { mutableStateOf(false) }
     var showAddStation by remember { mutableStateOf(false) }
     val channels by mixer.channels.collectAsStateWithLifecycle()
+    val recording by recorder.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val notify: (String) -> Unit = { message -> scope.launch { snackbars.showSnackbar(message) } }
+
+    val recordingLauncher = rememberRecordingLauncher(
+        title = { channels.joinToString(" + ") { it.station.name }.ifEmpty { "Tasty Radio" } },
+        onMessage = notify,
+    )
+
+    // The moment a take stops is the moment you want to send it, so offer that straight away.
+    LaunchedEffect(recording) {
+        val saved = recording as? Recorder.State.Saved ?: return@LaunchedEffect
+        val seconds = saved.durationMs / 1000
+        val result = snackbars.showSnackbar(
+            message = "Saved ${saved.fileName} (%d:%02d)".format(seconds / 60, seconds % 60),
+            actionLabel = "Share",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) shareRecording(context, saved)
+        recorder.acknowledge()
+    }
+
+    LaunchedEffect(recording) {
+        val failed = recording as? Recorder.State.Failed ?: return@LaunchedEffect
+        snackbars.showSnackbar("Recording failed: ${failed.reason}")
+        recorder.acknowledge()
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
@@ -66,6 +100,14 @@ fun RootScreen(
                     onStopChannel = mixer::stop,
                     onStopAll = mixer::stopAll,
                     onRetry = mixer::retry,
+                    recording = recording,
+                    onToggleRecording = {
+                        if (recording is Recorder.State.Recording) {
+                            recordingLauncher.stop()
+                        } else {
+                            recordingLauncher.start()
+                        }
+                    },
                 )
                 if (!mixerExpanded) {
                     NavigationBar {
@@ -94,11 +136,44 @@ fun RootScreen(
             )
 
             Tab.Search -> SearchScreen(
+                search = search,
                 modifier = Modifier.padding(padding),
                 onAddByUrl = { showAddStation = true },
+                onSync = { scope.launch { search.sync() } },
+                onAudition = { station ->
+                    // Quietly, under whatever is already playing — that's the only way to tell
+                    // whether it belongs there.
+                    if (!mixer.play(station, Mixer.AUDITION_FADER)) {
+                        notify("The mix is full — stop a station before auditioning another.")
+                    }
+                },
+                onAdd = { hit ->
+                    scope.launch {
+                        val added = repository.add(
+                            name = hit.name,
+                            streamUrl = hit.url,
+                            imageUrl = hit.favicon.ifBlank { null },
+                            sourceUuid = hit.uuid.ifBlank { null },
+                            source = hit.source,
+                        )
+                        notify(
+                            if (added == null) "Already in your collection." else "Added ${hit.name}."
+                        )
+                    }
+                },
             )
 
-            Tab.Settings -> SettingsScreen(modifier = Modifier.padding(padding))
+            Tab.Settings -> SettingsScreen(
+                search = search,
+                modifier = Modifier.padding(padding),
+                onSync = { scope.launch { search.sync() } },
+                onClearIndex = {
+                    scope.launch {
+                        search.clearIndex()
+                        notify("Station index cleared.")
+                    }
+                },
+            )
         }
     }
 

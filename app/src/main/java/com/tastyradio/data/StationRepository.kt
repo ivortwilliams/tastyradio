@@ -6,7 +6,13 @@ class StationRepository(private val dao: StationDao) {
 
     val stations: Flow<List<Station>> = dao.observeAll()
 
-    suspend fun add(name: String, streamUrl: String, imageUrl: String? = null): Station? {
+    suspend fun add(
+        name: String,
+        streamUrl: String,
+        imageUrl: String? = null,
+        sourceUuid: String? = null,
+        source: String? = null,
+    ): Station? {
         val url = streamUrl.trim()
         if (url.isEmpty()) return null
         dao.findByUrl(url)?.let { return null } // already collected; adding it twice is never wanted
@@ -14,6 +20,8 @@ class StationRepository(private val dao: StationDao) {
             name = name.trim().ifEmpty { url.removePrefix("http://").removePrefix("https://").substringBefore('/') },
             streamUrl = url,
             imageUrl = imageUrl,
+            sourceUuid = sourceUuid,
+            source = source,
         )
         return station.copy(id = dao.insert(station))
     }

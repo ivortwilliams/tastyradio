@@ -1,6 +1,11 @@
 package com.tastyradio.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,16 +26,20 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tastyradio.playback.Mixer
+import com.tastyradio.record.Recorder
 
 /**
  * Where Tasty Radio visibly stops being Transistor.
@@ -48,6 +57,8 @@ fun MixerBar(
     onStopChannel: (String) -> Unit,
     onStopAll: () -> Unit,
     onRetry: (String) -> Unit,
+    recording: Recorder.State,
+    onToggleRecording: () -> Unit,
 ) {
     if (channels.isEmpty()) return
 
@@ -65,8 +76,10 @@ fun MixerBar(
             CollapsedRow(
                 channels = channels,
                 expanded = expanded,
+                recording = recording,
                 onToggleExpanded = { onExpandedChange(!expanded) },
                 onStopAll = onStopAll,
+                onToggleRecording = onToggleRecording,
             )
 
             AnimatedVisibility(visible = expanded) {
@@ -82,6 +95,9 @@ fun MixerBar(
                             onStop = { onStopChannel(channel.key) },
                             onRetry = { onRetry(channel.key) },
                         )
+                    }
+                    if (recording is Recorder.State.Recording) {
+                        RecordingRow(recording)
                     }
                     if (channels.size < Mixer.MAX_CHANNELS) {
                         Text(
@@ -102,8 +118,10 @@ fun MixerBar(
 private fun CollapsedRow(
     channels: List<Mixer.Channel>,
     expanded: Boolean,
+    recording: Recorder.State,
     onToggleExpanded: () -> Unit,
     onStopAll: () -> Unit,
+    onToggleRecording: () -> Unit,
 ) {
     val connecting = channels.any { it.state == Mixer.ChannelState.Connecting }
     val title = if (channels.size == 1) {
@@ -158,8 +176,30 @@ private fun CollapsedRow(
         Text(
             text = if (expanded) "▾" else "▴",
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
+        // Record. Elapsed time lives in the expanded sheet; here it's just a blinking red dot.
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clickable(onClick = onToggleRecording),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (recording is Recorder.State.Recording) {
+                val blink by rememberInfiniteTransition(label = "rec").animateFloat(
+                    initialValue = 1f,
+                    targetValue = 0.25f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(700),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "recAlpha",
+                )
+                StopGlyph(size = 15.dp, tint = Color(0xFFFF5252).copy(alpha = blink))
+            } else {
+                RecordGlyph(size = 15.dp)
+            }
+        }
         // Master stop. Live streams stop, they don't pause.
         Box(
             modifier = Modifier
@@ -173,6 +213,33 @@ private fun CollapsedRow(
                 StopGlyph(size = 18.dp)
             }
         }
+    }
+}
+
+/** Elapsed time while recording — the one number you want while a take is running. */
+@Composable
+private fun RecordingRow(recording: Recorder.State.Recording) {
+    var elapsed by remember(recording.startedAtMs) { mutableStateOf(0L) }
+    LaunchedEffect(recording.startedAtMs) {
+        while (true) {
+            elapsed = System.currentTimeMillis() - recording.startedAtMs
+            delay(500)
+        }
+    }
+    val seconds = elapsed / 1000
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RecordGlyph(size = 12.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Recording  %d:%02d".format(seconds / 60, seconds % 60),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

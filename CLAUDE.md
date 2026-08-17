@@ -51,12 +51,20 @@ Working today:
 - Add by URL, and M3U/PLS import
 - Three-tab navigation: Stations / Search / Settings (Search and Settings are honest placeholders)
 
-Not built: **recording** (phase 3), **search + station index** (phase 4), settings and maintenance
-(phase 5). See [`docs/design/soundscape.md`](docs/design/soundscape.md#build-order).
+- **Recording** the mix: `MediaProjection` playback capture of our own UID → AAC → `.m4a` in
+  `MediaStore`, named for the stations in it, with a share prompt when it stops. *Verified: a
+  1:49 take, AAC-LC 48 kHz stereo, mean volume −14 dB — real audio, not silence.*
+- **Search over a local index**: the whole radio-browser corpus on the phone in bundled-SQLite
+  FTS5, searched instantly and offline across name/tags/country/language/homepage, with BM25
+  ranking multiplied by popularity and reachability. *Verified: 62,466 stations, full sync under
+  60 seconds.* Query expansion from tag co-occurrence (PMI, learned from the corpus) plus a
+  hand-checked concept map, always shown as removable chips. **▶ auditions a result straight into
+  the running mix** without adding it to the collection.
 
-Known rough edges: the media notification's button renders as *pause* rather than *stop* (it does
-stop the mix — only the icon is wrong; needs a custom `MediaNotification.Provider`), and a station
-whose stream stalls shows as `Connecting…` indefinitely rather than timing out.
+Not built: settings and maintenance (phase 5) — theme choice, larger buffer, editing toggles, M3U
+export, backup/restore. Also unbuilt from phase 4: the curated packs, extra sources beyond
+radio-browser, and the `WorkManager` weekly refresh (sync is manual today).
+See [`docs/design/soundscape.md`](docs/design/soundscape.md#build-order).
 
 ## Working preferences (from the owner)
 - Hobby project. **Bias toward shipping** — talk → change → working app.
@@ -244,5 +252,23 @@ app/src/main/java/com/tastyradio/
   station collide with every other.
 - **`adb shell dumpsys audio`** is how you prove the mixer works without ears: two
   `AudioPlaybackConfiguration` lines on our uid, both `state:started`.
-- A stalled stream currently sits in `Connecting…` forever — ExoPlayer's default load-error handling
-  keeps retrying. Needs a timeout that flips the channel to `Failed`.
+- A stalled stream used to sit in `Connecting…` forever, because ExoPlayer keeps retrying a load
+  that isn't erroring — it's just silent. `Mixer` now arms a 20-second watchdog per channel.
+
+### Learned building phases 3–4 (2026-08-17)
+- **`/json/stations` silently caps at 1000 rows.** No error, no header. The first sync built a
+  998-station index and reported success. Always page with explicit `limit`/`offset`.
+- **radio-browser mirrors are dual-stack, and IPv6 can be a dead end** — `de1` resolves to an AAAA
+  address the emulator can't route to. Ingest tries mirrors in turn, and the app sets
+  `java.net.preferIPv6Addresses=false`.
+- **Media3 renders `COMMAND_PLAY_PAUSE` as a pause icon**, which is the wrong promise for live
+  radio. A `CommandButton` with `ICON_STOP` in `setMediaButtonPreferences` adds a real stop, and
+  needs the custom `SessionCommand` allowed in `MediaSession.Callback.onConnect` or it's ignored.
+- **MediaProjection order matters on API 34+**: start the foreground service *with type
+  `mediaProjection`* first, and only then call `getMediaProjection()`. The reverse order is refused.
+- **The recording is post-fader**, since the system mixes before we capture — the take is exactly
+  what you heard. Watch for clipping when several loud channels sum; a single station already
+  peaked at 0 dBFS.
+- **Search ranking is split deliberately**: SQLite does BM25, then popularity and reachability are
+  applied in Kotlin. SQLite's `log()` needs `SQLITE_ENABLE_MATH_FUNCTIONS`, which isn't worth
+  depending on, and re-ranking a few hundred rows in Kotlin is free.

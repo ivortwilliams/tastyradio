@@ -17,11 +17,13 @@ which is the reference for how the rest of the app should feel.
 
 ## Status
 
-**It runs, and it mixes.** The station list, per-station faders, background playback with a media
-notification, artwork, and M3U/PLS import all work — verified on an emulator playing two stations
-at once. Recording is next.
+**It runs, it mixes, it records, and it searches.** Per-station faders over several simultaneous
+streams, background playback with a media notification, recording the mix to a shareable `.m4a`,
+and an offline search over 62,000 stations that matches on tags rather than just names — so
+"religion" finds Radio Vaticana, and ▶ auditions a result straight into whatever is already
+playing.
 
-Not built yet: recording the mix, station search, and most settings.
+Not built yet: theme and buffer settings, M3U export, backup/restore.
 
 ## Docs
 

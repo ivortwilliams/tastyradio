@@ -38,7 +38,12 @@ class MainActivity : ComponentActivity() {
         val app = application as TastyRadioApp
         setContent {
             TastyRadioTheme {
-                RootScreen(repository = app.repository, mixer = app.mixer)
+                RootScreen(
+                    repository = app.repository,
+                    mixer = app.mixer,
+                    recorder = app.recorder,
+                    search = app.search,
+                )
             }
         }
     }

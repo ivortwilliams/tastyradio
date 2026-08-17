@@ -247,8 +247,8 @@ Sequenced so the app becomes usable early and each phase is testable on a real p
 | **0** ✅ | Toolchain: install Android SDK, point Gradle at Studio's JBR 21, generate the Gradle/Compose project, get "hello world" onto both the emulator and the phone | Nothing is buildable until the SDK exists |
 | **1** ✅ | Room station model, station list UI, **M3U import**, single-station playback through `SoundscapePlayer` + `MediaSessionService`, collapsed playback bar | M3U import first means we seed the owner's real station list straight out of Transistor's own *Export M3U* — real data on day one, no typing URLs |
 | **2** ✅ | **The mixer**: player pool, N concurrent stations, per-channel volume/mute, expanded mixer sheet, single audio-focus owner | The reason the app exists |
-| **3** | **Recording**: MediaProjection consent, capture, AAC/`MediaMuxer` encode, MediaStore output, share sheet | The second reason the app exists |
-| **4** | **Discovery** — three-tab navigation, the multi-source local station index (visible sync, clean, FTS5), the **Search page**, curated packs, add-by-URL, station artwork. Detail in [`discovery.md`](discovery.md) | Convenience, once the app is already worth using — M3U import in phase 1 means search isn't blocking |
+| **3** ✅ | **Recording**: MediaProjection consent, capture, AAC/`MediaMuxer` encode, MediaStore output, share sheet | The second reason the app exists |
+| **4** ✅ | **Discovery** — three-tab navigation, the multi-source local station index (visible sync, clean, FTS5), the **Search page**, curated packs, add-by-URL, station artwork. Detail in [`discovery.md`](discovery.md) | Convenience, once the app is already worth using — M3U import in phase 1 means search isn't blocking |
 | **5** | Settings (theme, dynamic colour, larger buffer, editing toggles), maintenance (export M3U, backup/restore), **scenes**, **3-band EQ** | Polish and the optional extras |
 
 Phase 1 + 2 is the point at which Transistor can come off the phone.

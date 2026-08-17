@@ -22,10 +22,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.tastyradio.data.Station
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * The mixing desk. One [ExoPlayer] per active station, each with its own fader.
@@ -67,7 +74,11 @@ class Mixer(private val context: Context) {
     )
 
     private val main = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val audioManager = context.getSystemService(AudioManager::class.java)
+
+    /** One per connecting channel: a stream that never arrives has to become a visible failure. */
+    private val watchdogs = mutableMapOf<String, Job>()
 
     /** Insertion-ordered so the mixer rows don't jump around as channels come and go. */
     private val players = LinkedHashMap<String, ExoPlayer>()
@@ -134,16 +145,20 @@ class Mixer(private val context: Context) {
         player.prepare()
         player.playWhenReady = true
         applyVolumes()
+        armWatchdog(key)
         return true
     }
 
     fun stop(key: String) {
+        watchdogs.remove(key)?.cancel()
         players.remove(key)?.release()
         _channels.update { list -> list.filterNot { it.key == key } }
         if (players.isEmpty()) releaseFocusAndReceiver()
     }
 
     fun stopAll() {
+        watchdogs.values.forEach { it.cancel() }
+        watchdogs.clear()
         players.values.forEach { it.release() }
         players.clear()
         _channels.value = emptyList()
@@ -170,6 +185,26 @@ class Mixer(private val context: Context) {
         player.setMediaItem(MediaItem.fromUri(channel.station.streamUrl))
         player.prepare()
         player.playWhenReady = true
+        armWatchdog(key)
+    }
+
+    /**
+     * A stream that connects but never delivers audio used to sit on `Connecting…` forever, because
+     * ExoPlayer keeps retrying a load that isn't erroring — it's just silent. After
+     * [STALL_TIMEOUT_MS] the channel becomes an honest failure with a retry button instead.
+     */
+    private fun armWatchdog(key: String) {
+        watchdogs.remove(key)?.cancel()
+        watchdogs[key] = scope.launch {
+            delay(STALL_TIMEOUT_MS)
+            val channel = _channels.value.firstOrNull { it.key == key } ?: return@launch
+            if (channel.state == ChannelState.Connecting) {
+                players[key]?.stop()
+                updateChannel(key) {
+                    it.copy(state = ChannelState.Failed, error = "no audio after 20s")
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- faders
@@ -207,8 +242,13 @@ class Mixer(private val context: Context) {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+        val mediaSourceFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http))
+            // Give up after a few attempts so a dead host surfaces as an error rather than an
+            // indefinite silent retry loop.
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+
         return ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http)))
+            .setMediaSourceFactory(mediaSourceFactory)
             // false: this Mixer is the single audio-focus owner. See the class comment.
             .setAudioAttributes(attributes, false)
             // Likewise — one central becoming-noisy receiver, not one per player.
@@ -220,7 +260,10 @@ class Mixer(private val context: Context) {
     private inner class ChannelListener(private val key: String) : Player.Listener {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) updateChannel(key) { it.copy(state = ChannelState.Playing, error = null) }
+            if (isPlaying) {
+                watchdogs.remove(key)?.cancel()
+                updateChannel(key) { it.copy(state = ChannelState.Playing, error = null) }
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -309,6 +352,9 @@ class Mixer(private val context: Context) {
         const val DEFAULT_FADER = 0.75f
 
         private const val DUCK_FACTOR = 0.2f
+
+        /** How long a channel may sit connecting before it's called a failure. */
+        private const val STALL_TIMEOUT_MS = 20_000L
 
         /** radio-browser.info asks for a descriptive User-Agent, and so do some stream hosts. */
         private const val USER_AGENT = "TastyRadio/0.1 (Android; hobby project)"
