@@ -1,5 +1,6 @@
 package com.tastyradio.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -67,6 +68,7 @@ fun SearchScreen(
     var filters by remember { mutableStateOf(SearchRepository.Filters()) }
     var popular by remember { mutableStateOf(listOf<String>()) }
     var searching by remember { mutableStateOf(false) }
+    var expansionsExpanded by remember { mutableStateOf(false) }
     val syncState by search.syncState.collectAsStateWithLifecycle()
 
     LaunchedEffect(syncState) {
@@ -105,27 +107,13 @@ fun SearchScreen(
 
         SyncStatusLine(syncState = syncState, onSync = onSync)
 
-        // Expansions are always visible and removable. Invisible fuzzy matching reads as a broken
-        // app; a visible, steerable one reads as help.
         if (results.expansions.isNotEmpty()) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "also searching",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 14.dp, end = 4.dp),
-                )
-                results.expansions.forEach { term ->
-                    InputChip(
-                        selected = false,
-                        onClick = { dropped = dropped + term },
-                        label = { Text(term) },
-                        trailingIcon = { Text("✕", style = MaterialTheme.typography.labelSmall) },
-                    )
-                }
-            }
+            ExpansionRow(
+                expansions = results.expansions,
+                expanded = expansionsExpanded,
+                onToggleExpanded = { expansionsExpanded = !expansionsExpanded },
+                onRemove = { term -> dropped = dropped + term },
+            )
         }
 
         if (query.isNotBlank()) {
@@ -173,6 +161,70 @@ fun SearchScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * What the query got widened to.
+ *
+ * The rule is that expansion must be *visible and steerable* — invisible fuzzy matching reads as a
+ * broken app. But eight chips wrap to three rows and eat the results, so collapsed it's one line
+ * that still names the terms, and tapping it opens the removable chips.
+ */
+@Composable
+private fun ExpansionRow(
+    expansions: List<String>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    if (!expanded) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggleExpanded)
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val shown = expansions.take(3).joinToString(", ")
+            val rest = expansions.size - minOf(3, expansions.size)
+            Text(
+                text = "also searching: $shown" + if (rest > 0) " +$rest" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = " ⌄",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "also searching",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier
+                .clickable(onClick = onToggleExpanded)
+                .padding(top = 14.dp, end = 4.dp),
+        )
+        expansions.forEach { term ->
+            InputChip(
+                selected = false,
+                onClick = { onRemove(term) },
+                label = { Text(term) },
+                trailingIcon = { Text("✕", style = MaterialTheme.typography.labelSmall) },
+            )
+        }
+        TextButton(onClick = onToggleExpanded) { Text("⌃") }
     }
 }
 

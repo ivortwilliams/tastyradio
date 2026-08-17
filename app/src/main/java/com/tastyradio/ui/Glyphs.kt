@@ -58,6 +58,44 @@ fun PlayGlyph(size: Dp = 18.dp, tint: Color = MaterialTheme.colorScheme.onSurfac
     }
 }
 
+/** A little set: speaker, tuning dial, antenna. Drawn rather than pulled from an icon library. */
+@Composable
+fun RadioGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Canvas(modifier = Modifier.size(size)) {
+        val s = this.size.minDimension
+        val stroke = Stroke(width = s * 0.075f)
+
+        // Antenna, angled up from the top-right of the case.
+        drawLine(
+            color = tint,
+            start = Offset(s * 0.66f, s * 0.34f),
+            end = Offset(s * 0.90f, s * 0.10f),
+            strokeWidth = s * 0.075f,
+        )
+
+        // The case.
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(s * 0.06f, s * 0.32f),
+            size = Size(s * 0.88f, s * 0.58f),
+            cornerRadius = CornerRadius(s * 0.10f),
+            style = stroke,
+        )
+
+        // Speaker grille on the left.
+        drawCircle(
+            color = tint,
+            radius = s * 0.14f,
+            center = Offset(s * 0.34f, s * 0.61f),
+            style = stroke,
+        )
+
+        // Tuning dials on the right.
+        drawCircle(color = tint, radius = s * 0.035f, center = Offset(s * 0.70f, s * 0.52f))
+        drawCircle(color = tint, radius = s * 0.035f, center = Offset(s * 0.70f, s * 0.70f))
+    }
+}
+
 /** A filled circle: record. */
 @Composable
 fun RecordGlyph(size: Dp = 16.dp, tint: Color = Color(0xFFFF5252)) {

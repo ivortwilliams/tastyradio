@@ -31,7 +31,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, val glyph: String) {
-    Stations("Stations", "≡"),
+    /** Stations draws its own radio; the glyph here is unused for it. */
+    Stations("Stations", ""),
     Search("Search", "⌕"),
     Settings("Settings", "⚙"),
 }
@@ -121,7 +122,17 @@ fun RootScreen(
                                 selected = tab == entry,
                                 onClick = { tab = entry },
                                 icon = {
-                                    Text(entry.glyph, style = MaterialTheme.typography.titleLarge)
+                                    if (entry == Tab.Stations) {
+                                        RadioGlyph(
+                                            tint = if (tab == entry) {
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    } else {
+                                        Text(entry.glyph, style = MaterialTheme.typography.titleLarge)
+                                    }
                                 },
                                 label = { Text(entry.label) },
                             )
