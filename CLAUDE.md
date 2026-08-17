@@ -49,7 +49,9 @@ Working today:
   app being backgrounded.*
 - ICY stream metadata per channel; station artwork from directory favicons, monogram fallback
 - Add by URL, and M3U/PLS import
-- Three-tab navigation: Stations / Search / Settings (Search and Settings are honest placeholders)
+- Three-tab navigation: Stations / Search / Settings
+- Launcher icon: Millais's *Ophelia* (public domain) — the artwork on the owner's own Tasty Radio
+  station, which the app is named after
 
 - **Recording** the mix: `MediaProjection` playback capture of our own UID → AAC → `.m4a` in
   `MediaStore`, named for the stations in it, with a share prompt when it stops. *Verified: a
@@ -61,9 +63,18 @@ Working today:
   hand-checked concept map, always shown as removable chips. **▶ auditions a result straight into
   the running mix** without adding it to the collection.
 
-Not built: settings and maintenance (phase 5) — theme choice, larger buffer, editing toggles, M3U
-export, backup/restore. Also unbuilt from phase 4: the curated packs, extra sources beyond
-radio-browser, and the `WorkManager` weekly refresh (sync is manual today).
+- **Edit and remove stations**: long-press a row to change name, artwork (device photo picker) or
+  stream URL; swipe left to remove, with confirmation.
+- **Settings that matter**: large buffer (~60s ahead, on by default), automatic index refresh
+  (weekly/daily/off, Wi-Fi + charging via `WorkManager`), M3U export to Downloads.
+- **Sync you can check**: station count against radio-browser's own reported total, "complete" vs
+  "partial", last-run success/failure with timestamp, change since the previous sync, per-source
+  counts, size on disk. *Four consecutive full syncs, all 62,466 against an expected 62,450.*
+
+**Not built** (and not currently wanted): theme picker — the app follows the device, deliberately.
+Still open if ever wanted: named **scenes** (a saved set of stations + volumes), the **curated
+packs**, and **extra index sources** beyond radio-browser (SomaFM, Icecast/Xiph). Backup/restore
+beyond M3U export — images aren't in the export.
 See [`docs/design/soundscape.md`](docs/design/soundscape.md#build-order).
 
 ## Working preferences (from the owner)
@@ -127,8 +138,8 @@ AndroidX versions refuse to compile against 36; `targetSdk` stays 36.
 - **Three-tab bottom navigation**: **Stations**, **Search**, **Settings**. Transistor's search is
   a popup dialog; ours is a full page, because discovery here includes browsing, filtering and
   **auditioning a station into the running mix**.
-- **`android.media.audiofx.Equalizer`** per player for the optional 3-band EQ — best-effort,
-  behind a toggle, last on the list.
+- ~~3-band EQ~~ — **cut by the owner, 2026-08-17.** It was built (per-player `audiofx.Equalizer`)
+  and then removed the same day on their instruction. Don't reintroduce it without being asked.
 - Package name: **`com.tastyradio`** unless the owner says otherwise (was TBD; this is the
   working default, cheap to change *before* first commit of the Gradle project and annoying
   after).
@@ -148,7 +159,7 @@ brief:
 7. **Settings**: theme, dynamic colours, tap-anywhere-to-play, larger buffer, editing toggles,
    station-index refresh frequency + "clear index".
 8. **Maintenance**: update station images, export M3U, backup/restore the collection.
-9. **Stretch**: named **scenes** (a saved set of stations + volumes), 3-band EQ.
+9. **Stretch**: named **scenes** (a saved set of stations + volumes).
 
 ## Local environment (verified 2026-08-17)
 - **Android Studio is installed**: `C:\Program Files\Android\Android Studio`, with a bundled
@@ -229,8 +240,10 @@ app/src/main/java/com/tastyradio/
   recording, with matching `FOREGROUND_SERVICE_*` permissions on API 34+.
 - **A stalled channel must not kill the mix.** Each stream reconnects on its own; losing one
   station of three is survivable and should behave that way.
-- **`audiofx` is vendor-implemented and inconsistent.** Query EQ bands, never assume them, and
-  accept that the EQ may do nothing on a given device. It's optional by the owner's own framing.
+- **SQLite doesn't shrink on delete.** Rebuilding the index each sync grew the file 32 → 53 → 71 MB
+  while the *content* stayed identical, and Settings shows that number. `VACUUM` needs a
+  `wal_checkpoint(TRUNCATE)` **after** it as well as before, or the write-ahead log left behind is
+  bigger than the database it just compacted. Steady at 41 MB now.
 - Becoming-noisy (headphones unplugged) stops **all** channels, from a single receiver.
 - Volume sliders need a perceptual curve (roughly `volume = slider³`, or a dB taper) —
   `ExoPlayer.volume` is linear amplitude and feels wrong mapped straight to a fader.

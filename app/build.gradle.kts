@@ -67,6 +67,8 @@ dependencies {
     // Android's own SQLite has no FTS5 (verified: 3.44.3 on API 36 exposes fts3/fts4 only), and
     // both the search index and its bm25 ranking need FTS5. This ships our own SQLite.
     implementation(libs.androidx.sqlite.bundled)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

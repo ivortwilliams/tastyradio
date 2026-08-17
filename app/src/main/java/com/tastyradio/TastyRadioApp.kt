@@ -6,8 +6,10 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.tastyradio.data.Settings
 import com.tastyradio.data.StationRepository
 import com.tastyradio.data.TastyDb
+import com.tastyradio.search.SyncWorker
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
@@ -32,6 +34,7 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
     val mixer by lazy { Mixer(this) }
     val recorder by lazy { Recorder(this) }
     val search by lazy { SearchRepository(this) }
+    val settings by lazy { Settings(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -43,6 +46,14 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
         // Never auto-download the corpus: it's tens of megabytes and the user might be on mobile
         // data. This only restores what's already on disk so the UI can say so honestly.
         search.restoreState(appScope)
+
+        // Settings that the Mixer reads directly, kept in sync for the life of the process.
+        appScope.launch {
+            settings.values.collect { values ->
+                mixer.largeBuffer = values.largeBuffer
+                SyncWorker.schedule(this@TastyRadioApp, values.refresh)
+            }
+        }
     }
 
     /**

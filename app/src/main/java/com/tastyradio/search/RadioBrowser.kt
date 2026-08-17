@@ -26,6 +26,8 @@ object RadioBrowser {
     /** Big enough to keep the corpus to a handful of requests, small enough to stay a sane response. */
     private const val PAGE_SIZE = 10_000
 
+    private const val PAGE_ATTEMPTS = 3
+
     private val KNOWN_MIRRORS = listOf(
         "de1.api.radio-browser.info",
         "de2.api.radio-browser.info",
@@ -71,14 +73,57 @@ object RadioBrowser {
         var offset = 0
         var total = 0
         while (!isCancelled()) {
-            val seen = fetchPage(host, offset, batchSize, isCancelled) { rows ->
-                total += rows.size
-                onBatch(rows, total)
+            // A page that fails is usually a stumble, not a dead server. Retry before giving up on
+            // the whole corpus, otherwise one hiccup at page five throws away four good pages.
+            var seen = -1
+            var attempt = 0
+            var lastError: Throwable? = null
+            while (attempt < PAGE_ATTEMPTS && seen < 0) {
+                try {
+                    seen = fetchPage(host, offset, batchSize, isCancelled) { rows ->
+                        total += rows.size
+                        onBatch(rows, total)
+                    }
+                } catch (error: Throwable) {
+                    lastError = error
+                    attempt++
+                    if (attempt < PAGE_ATTEMPTS) Thread.sleep(1_000L * attempt)
+                }
             }
+            if (seen < 0) throw lastError ?: IllegalStateException("page at offset $offset failed")
             if (seen < PAGE_SIZE) return // short page means we've reached the end
             offset += PAGE_SIZE
         }
     }
+
+    /**
+     * How many stations the server thinks it has.
+     *
+     * This is what makes a sync checkable rather than merely finished: if we pulled 30,000 and the
+     * server says 62,000, the index is partial and the app should say so instead of quietly
+     * claiming success. The first version of this code built a 998-station index and reported it
+     * as a complete sync.
+     */
+    fun fetchExpectedCount(host: String): Int? = runCatching {
+        val connection = (URL("https://$host/json/stats").openConnection() as HttpURLConnection).apply {
+            setRequestProperty("User-Agent", USER_AGENT)
+            connectTimeout = 15_000
+            readTimeout = 20_000
+        }
+        try {
+            var stations: Int? = null
+            JsonReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { reader ->
+                reader.beginObject()
+                while (reader.hasNext()) {
+                    if (reader.nextName() == "stations") stations = reader.nextIntOrZero() else reader.skipValue()
+                }
+                reader.endObject()
+            }
+            stations
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrNull()
 
     /** Tries mirrors in turn; a dead mirror shouldn't look like a dead feature. */
     fun fetchAllFromAnyMirror(

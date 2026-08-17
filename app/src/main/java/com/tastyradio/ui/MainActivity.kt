@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
                     mixer = app.mixer,
                     recorder = app.recorder,
                     search = app.search,
+                    settings = app.settings,
                 )
             }
         }

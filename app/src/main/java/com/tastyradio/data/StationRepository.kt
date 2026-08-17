@@ -1,6 +1,11 @@
 package com.tastyradio.data
 
+import android.content.Context
+import android.net.Uri
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class StationRepository(private val dao: StationDao) {
 
@@ -35,11 +40,35 @@ class StationRepository(private val dao: StationDao) {
         return added
     }
 
-    suspend fun rename(station: Station, name: String) = dao.update(station.copy(name = name.trim()))
-
-    suspend fun setStreamUrl(station: Station, url: String) = dao.update(station.copy(streamUrl = url.trim()))
+    suspend fun update(station: Station) = dao.update(
+        station.copy(name = station.name.trim(), streamUrl = station.streamUrl.trim())
+    )
 
     suspend fun delete(station: Station) = dao.delete(station)
+
+    /**
+     * Copies a picked image into our own storage and returns a `file://` URI for it.
+     *
+     * The picker hands back a temporary permission that dies with the process, so pointing the
+     * station at that URI would give you artwork that works today and a blank circle next week.
+     */
+    suspend fun saveArtwork(context: Context, station: Station, source: Uri): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val folder = File(context.filesDir, "station-images").apply { mkdirs() }
+                val destination = File(folder, "station-${station.id}-${System.currentTimeMillis()}.img")
+                context.contentResolver.openInputStream(source)?.use { input ->
+                    destination.outputStream().use { output -> input.copyTo(output) }
+                } ?: return@runCatching null
+
+                // Drop the previous copy so edits don't quietly accumulate files.
+                station.imageUrl
+                    ?.removePrefix("file://")
+                    ?.let { previous -> File(previous).takeIf { it.exists() && it != destination }?.delete() }
+
+                "file://${destination.absolutePath}"
+            }.getOrNull()
+        }
 
     /**
      * First run gets the owner's own station list, so the app is useful before anything is typed

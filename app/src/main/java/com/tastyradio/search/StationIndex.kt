@@ -297,6 +297,20 @@ class StationIndex(context: Context) {
         }
     }
 
+    /**
+     * Reclaim the space a re-sync leaves behind. SQLite doesn't shrink the file when rows are
+     * deleted, so without this the index looks like it grows every refresh — and the size shown in
+     * Settings would be a lie.
+     */
+    fun compact() {
+        val db = open()
+        db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+        db.execSQL("VACUUM")
+        // Again afterwards: VACUUM rewrites the whole database through the write-ahead log, so
+        // skipping this leaves a -wal file bigger than the database it just compacted.
+        db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+    }
+
     fun count(): Int =
         open().prepare("SELECT COUNT(*) FROM station").use { if (it.step()) it.getLong(0).toInt() else 0 }
 

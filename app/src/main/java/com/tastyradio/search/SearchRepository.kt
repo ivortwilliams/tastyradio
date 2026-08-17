@@ -25,7 +25,17 @@ class SearchRepository(private val context: Context) {
     sealed interface SyncState {
         data object NeverSynced : SyncState
         data class Syncing(val phase: String, val fetched: Int, val source: String) : SyncState
-        data class Synced(val finishedAt: Long, val stations: Int) : SyncState
+        data class Synced(
+            val finishedAt: Long,
+            val stations: Int,
+            /** Change since the previous sync — "+37" is what proves a refresh did something. */
+            val added: Int?,
+            /** What the server said it had, so "complete" is checkable rather than assumed. */
+            val expected: Int?,
+        ) : SyncState {
+            val complete: Boolean get() = expected == null || stations >= expected * 0.95
+        }
+
         data class Failed(
             val reason: String,
             val lastGoodAt: Long?,
@@ -49,6 +59,10 @@ class SearchRepository(private val context: Context) {
         val bySource: List<Pair<String, Int>>,
         val sizeBytes: Long,
         val lastSyncFinishedAt: Long?,
+        val lastSyncStartedAt: Long?,
+        /** "ok" or the failure reason, persisted, so the last run is always accountable. */
+        val lastResult: String?,
+        val expected: Int?,
     )
 
     private val index = StationIndex(context)
@@ -67,9 +81,14 @@ class SearchRepository(private val context: Context) {
             lock.withLock {
                 val count = runCatching { index.count() }.getOrDefault(0)
                 val finishedAt = runCatching { index.getMeta(KEY_LAST_SYNC)?.toLongOrNull() }.getOrNull()
+                val expected = runCatching { index.getMeta(KEY_EXPECTED)?.toIntOrNull() }.getOrNull()
                 _syncState.value = when {
-                    count > 0 && finishedAt != null -> SyncState.Synced(finishedAt, count)
-                    count > 0 -> SyncState.Synced(0, count)
+                    count > 0 -> SyncState.Synced(
+                        finishedAt = finishedAt ?: 0,
+                        stations = count,
+                        added = null,
+                        expected = expected,
+                    )
                     else -> SyncState.NeverSynced
                 }
             }
@@ -99,15 +118,21 @@ class SearchRepository(private val context: Context) {
 
             val tagCounts = HashMap<String, Int>(1 shl 14)
             var staged = 0
+            var expected: Int? = null
+            val startedAt = System.currentTimeMillis()
+            val before = runCatching { lock.withLock { index.count() } }.getOrDefault(0)
 
             lock.withLock {
                 index.open()
+                index.putMeta(KEY_LAST_STARTED, startedAt.toString())
                 index.clearSource(RadioBrowser.SOURCE)
 
                 RadioBrowser.fetchAllFromAnyMirror(
                     batchSize = BATCH,
                     isCancelled = { cancelRequested },
                     onHost = { host ->
+                        // Ask the server what it has, so "did I get everything?" has an answer.
+                        expected = RadioBrowser.fetchExpectedCount(host)
                         _syncState.value = SyncState.Syncing("Contacting $host", 0, RadioBrowser.SOURCE)
                     },
                 ) { rows, total ->
@@ -141,17 +166,45 @@ class SearchRepository(private val context: Context) {
                 )
                 index.writeNeighbours(neighbours)
 
+                _syncState.value = SyncState.Syncing("Compacting", staged, RadioBrowser.SOURCE)
+                runCatching { index.compact() }
+
                 val finishedAt = System.currentTimeMillis()
-                index.putMeta(KEY_LAST_SYNC, finishedAt.toString())
                 val total = index.count()
-                _syncState.value = SyncState.Synced(finishedAt, total)
-                Log.i(TAG, "sync complete: $total stations, ${neighbours.size} tags with neighbours")
+                index.putMeta(KEY_LAST_SYNC, finishedAt.toString())
+                index.putMeta(KEY_LAST_RESULT, "ok")
+                index.putMeta(KEY_COUNT, total.toString())
+                expected?.let { index.putMeta(KEY_EXPECTED, it.toString()) }
+
+                _syncState.value = SyncState.Synced(
+                    finishedAt = finishedAt,
+                    stations = total,
+                    added = if (before > 0) total - before else null,
+                    expected = expected,
+                )
+                Log.i(
+                    TAG,
+                    "sync complete: $total stations (expected ${expected ?: "?"}, " +
+                        "was $before), ${neighbours.size} tags with neighbours",
+                )
             }
         } catch (error: Throwable) {
             Log.e(TAG, "sync failed", error)
-            val count = runCatching { lock.withLock { index.count() } }.getOrDefault(0)
+            val reason = if (cancelRequested) {
+                "cancelled"
+            } else {
+                error.message ?: error.javaClass.simpleName
+            }
+            val count = runCatching {
+                lock.withLock {
+                    // Persist the failure too: a run that went wrong should still be accountable
+                    // next time the app opens, not just while the screen is still up.
+                    index.putMeta(KEY_LAST_RESULT, reason)
+                    index.count()
+                }
+            }.getOrDefault(0)
             _syncState.value = SyncState.Failed(
-                reason = if (cancelRequested) "cancelled" else (error.message ?: error.javaClass.simpleName),
+                reason = reason,
                 lastGoodAt = lastGoodAt,
                 stations = count,
             )
@@ -213,8 +266,11 @@ class SearchRepository(private val context: Context) {
                     bySource = index.countBySource(),
                     sizeBytes = index.sizeOnDiskBytes(),
                     lastSyncFinishedAt = index.getMeta(KEY_LAST_SYNC)?.toLongOrNull(),
+                    lastSyncStartedAt = index.getMeta(KEY_LAST_STARTED)?.toLongOrNull(),
+                    lastResult = index.getMeta(KEY_LAST_RESULT),
+                    expected = index.getMeta(KEY_EXPECTED)?.toIntOrNull(),
                 )
-            }.getOrDefault(Stats(0, emptyList(), 0, null))
+            }.getOrDefault(Stats(0, emptyList(), 0, null, null, null, null))
         }
     }
 
@@ -251,6 +307,10 @@ class SearchRepository(private val context: Context) {
     private companion object {
         const val TAG = "SearchRepository"
         const val KEY_LAST_SYNC = "lastSyncFinishedAt"
+        const val KEY_LAST_STARTED = "lastSyncStartedAt"
+        const val KEY_LAST_RESULT = "lastSyncResult"
+        const val KEY_COUNT = "stationCount"
+        const val KEY_EXPECTED = "expectedStations"
         const val BATCH = 2_000
 
         /** How much better a direct hit is than an expansion-only hit. */

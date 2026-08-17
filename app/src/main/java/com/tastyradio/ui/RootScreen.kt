@@ -21,10 +21,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tastyradio.data.M3uExport
+import com.tastyradio.data.Settings
 import com.tastyradio.data.StationRepository
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, val glyph: String) {
@@ -52,7 +55,9 @@ fun RootScreen(
     mixer: Mixer,
     recorder: Recorder,
     search: SearchRepository,
+    settings: Settings,
 ) {
+    val settingsValues by settings.values.collectAsStateWithLifecycle(initialValue = Settings.Values())
     var tab by remember { mutableStateOf(Tab.Stations) }
     var mixerExpanded by remember { mutableStateOf(false) }
     var showAddStation by remember { mutableStateOf(false) }
@@ -165,12 +170,49 @@ fun RootScreen(
 
             Tab.Settings -> SettingsScreen(
                 search = search,
+                settings = settingsValues,
                 modifier = Modifier.padding(padding),
+                onLargeBuffer = { enabled ->
+                    scope.launch {
+                        settings.setLargeBuffer(enabled)
+                        notify(
+                            if (enabled) {
+                                "Large buffer on — steadier, slower to start."
+                            } else {
+                                "Large buffer off — starts faster, more prone to dropouts."
+                            }
+                        )
+                    }
+                },
+                onRefresh = { frequency ->
+                    scope.launch {
+                        settings.setRefresh(frequency)
+                        notify(
+                            when (frequency) {
+                                Settings.RefreshFrequency.Off -> "Automatic refresh off."
+                                else -> "Index will refresh ${frequency.label.lowercase()} on Wi-Fi while charging."
+                            }
+                        )
+                    }
+                },
                 onSync = { scope.launch { search.sync() } },
                 onClearIndex = {
                     scope.launch {
                         search.clearIndex()
                         notify("Station index cleared.")
+                    }
+                },
+                onExportM3u = {
+                    scope.launch {
+                        val stations = repository.stations.first()
+                        val uri = M3uExport.export(context, stations)
+                        notify(
+                            if (uri == null) {
+                                "Nothing to export."
+                            } else {
+                                "Exported ${stations.size} stations to Downloads/Tasty Radio."
+                            }
+                        )
                     }
                 },
             )

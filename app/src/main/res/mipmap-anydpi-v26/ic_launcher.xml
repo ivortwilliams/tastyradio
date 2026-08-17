@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Millais's *Ophelia* (1851–52), public domain — the painting that is already the artwork on the
+    owner's own "Tasty Radio" station, which the app is named after.
+
+    The painting is the background layer because that layer is full-bleed: the launcher's mask shows
+    roughly the middle two thirds, so the crop is composed for a circle. The foreground is empty;
+    the faders glyph survives as the monochrome layer, which has to be a silhouette and so can't be
+    a painting.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <background android:drawable="@drawable/ic_launcher_ophelia" />
+    <foreground android:drawable="@android:color/transparent" />
     <monochrome android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>

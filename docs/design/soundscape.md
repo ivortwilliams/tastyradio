@@ -102,7 +102,16 @@ Per-channel **mute** and **solo** are cheap to add on top and genuinely useful w
 
 ---
 
-## The 3-band EQ (low priority, only if easy)
+## The 3-band EQ — ❌ cut by the owner, 2026-08-17
+
+**Built, then removed the same day on the owner's instruction.** It worked as described below
+(per-player `audiofx.Equalizer`, three bands found by querying centre frequencies), and it is gone.
+Don't reintroduce it without being asked. The reasoning below is kept only so nobody re-derives it.
+
+<details>
+<summary>Original design, for the record</summary>
+
+### The 3-band EQ (low priority, only if easy)
 
 Marked explicitly as optional by the owner. Two routes:
 
@@ -120,6 +129,8 @@ escalating to (2) — it was never the point of the app.
 
 Per-station EQ is the interesting version (dulling the highs on one stream so another sits on
 top of it), and it comes free with route (1) since each player has its own audio session.
+
+</details>
 
 ---
 

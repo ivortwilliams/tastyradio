@@ -18,7 +18,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.tastyradio.data.Station
@@ -88,6 +90,13 @@ class Mixer(private val context: Context) {
 
     /** Set while another app holds transient focus and asked us to duck rather than stop. */
     private var ducking = false
+
+    /**
+     * Applied to players as they're built. Changing it mid-mix doesn't disturb what's already
+     * playing — a new buffer size takes effect the next time a station starts.
+     */
+    @Volatile var largeBuffer: Boolean = true
+
 
     private var focusRequest: AudioFocusRequest? = null
     private var noisyReceiverRegistered = false
@@ -219,6 +228,7 @@ class Mixer(private val context: Context) {
         applyVolumes()
     }
 
+
     private fun applyVolumes() {
         val duck = if (ducking) DUCK_FACTOR else 1f
         for (channel in _channels.value) {
@@ -248,12 +258,33 @@ class Mixer(private val context: Context) {
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
         return ExoPlayer.Builder(context)
+            .setLoadControl(buildLoadControl())
             .setMediaSourceFactory(mediaSourceFactory)
             // false: this Mixer is the single audio-focus owner. See the class comment.
             .setAudioAttributes(attributes, false)
             // Likewise — one central becoming-noisy receiver, not one per player.
             .setHandleAudioBecomingNoisy(false)
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            .build()
+    }
+
+    /**
+     * A deliberately deep buffer. Radio streams on mobile data stutter, and with several playing at
+     * once a stall is far more noticeable — one channel dropping out breaks the whole mix. The cost
+     * is that playback takes longer to start, which is the right trade for a soundscape you leave
+     * running. Roughly a minute of audio when large, ten seconds when not.
+     */
+    private fun buildLoadControl(): LoadControl {
+        val maxMs = if (largeBuffer) 60_000 else 15_000
+        val startMs = if (largeBuffer) 5_000 else 1_500
+        return DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ maxMs,
+                /* maxBufferMs = */ maxMs,
+                /* bufferForPlaybackMs = */ startMs,
+                /* bufferForPlaybackAfterRebufferMs = */ startMs * 2,
+            )
+            .setBackBuffer(0, false)
             .build()
     }
 
