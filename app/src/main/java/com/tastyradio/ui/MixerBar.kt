@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -92,7 +95,15 @@ fun MixerBar(
             )
 
             AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                // Capped and scrollable: four channels with a set of effect sliders open is taller
+                // than the screen, and now that the navigation bar stays put the sheet has to live
+                // within a budget rather than growing until something falls off the top.
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 340.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 8.dp)
+                ) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
                     )

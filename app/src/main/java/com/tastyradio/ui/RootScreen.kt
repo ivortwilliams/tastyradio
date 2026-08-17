@@ -127,8 +127,7 @@ fun RootScreen(
         bottomBar = {
             Column {
                 // Derived, never trusted from state alone: stopping the last station while the
-                // sheet was open used to leave `mixerExpanded` true with no pill left to collapse
-                // it, so the navigation bar vanished with no way back.
+                // sheet was open used to leave `mixerExpanded` true with nothing left to collapse it.
                 val sheetExpanded = mixerExpanded && channels.isNotEmpty()
 
                 MixerBar(
@@ -151,30 +150,34 @@ fun RootScreen(
                         }
                     },
                 )
-                if (!sheetExpanded) {
-                    NavigationBar {
-                        Tab.entries.forEach { entry ->
-                            NavigationBarItem(
-                                selected = tab == entry,
-                                onClick = { tab = entry },
-                                icon = {
-                                    val tint = if (tab == entry) {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                    when (entry) {
-                                        Tab.Mixes -> FadersGlyph(tint = tint)
-                                        Tab.Stations -> RadioGlyph(tint = tint)
-                                        else -> Text(
-                                            entry.glyph,
-                                            style = MaterialTheme.typography.titleLarge,
-                                        )
-                                    }
-                                },
-                                label = { Text(entry.label) },
-                            )
-                        }
+                // The navigation bar stays put even with the mixer open. Hiding it left you
+                // stranded on whichever tab you happened to be on while adjusting levels.
+                NavigationBar {
+                    Tab.entries.forEach { entry ->
+                        NavigationBarItem(
+                            selected = tab == entry,
+                            onClick = {
+                                tab = entry
+                                // Changing tab means you're done fiddling: give the screen back.
+                                mixerExpanded = false
+                            },
+                            icon = {
+                                val tint = if (tab == entry) {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                                when (entry) {
+                                    Tab.Mixes -> FadersGlyph(tint = tint)
+                                    Tab.Stations -> RadioGlyph(tint = tint)
+                                    else -> Text(
+                                        entry.glyph,
+                                        style = MaterialTheme.typography.titleLarge,
+                                    )
+                                }
+                            },
+                            label = { Text(entry.label) },
+                        )
                     }
                 }
             }
