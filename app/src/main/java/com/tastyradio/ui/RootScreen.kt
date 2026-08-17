@@ -178,6 +178,10 @@ fun RootScreen(
                             sourceUuid = hit.uuid.ifBlank { null },
                             source = hit.source,
                             tags = hit.tags,
+                            codec = hit.codec,
+                            bitrate = hit.bitrate,
+                            country = hit.country,
+                            language = hit.language,
                         )
                         notify(
                             if (added == null) "Already in your collection." else "Added ${hit.name}."

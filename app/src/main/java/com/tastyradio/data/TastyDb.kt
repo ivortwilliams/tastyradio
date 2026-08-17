@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
-@Database(entities = [Station::class], version = 2, exportSchema = false)
+@Database(entities = [Station::class], version = 3, exportSchema = false)
 abstract class TastyDb : RoomDatabase() {
 
     abstract fun stations(): StationDao
@@ -25,9 +25,19 @@ abstract class TastyDb : RoomDatabase() {
             }
         }
 
+        /** The rest of the directory's fields, so saved stations can read like search results. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE stations ADD COLUMN codec TEXT")
+                connection.execSQL("ALTER TABLE stations ADD COLUMN bitrate INTEGER")
+                connection.execSQL("ALTER TABLE stations ADD COLUMN country TEXT")
+                connection.execSQL("ALTER TABLE stations ADD COLUMN language TEXT")
+            }
+        }
+
         fun build(context: Context): TastyDb =
             Room.databaseBuilder(context, TastyDb::class.java, "tasty.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

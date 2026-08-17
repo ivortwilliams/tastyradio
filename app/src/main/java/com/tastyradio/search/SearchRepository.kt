@@ -254,6 +254,15 @@ class SearchRepository(private val context: Context) {
         }
     }
 
+    /** Looks a saved station up in the index by its stream URL. Null if the index isn't built. */
+    suspend fun lookup(url: String): StationIndex.Hit? = withContext(Dispatchers.IO) {
+        lock.withLock {
+            runCatching {
+                if (index.count() == 0) null else index.findByUrl(url)
+            }.getOrNull()
+        }
+    }
+
     suspend fun popularTags(limit: Int = 24): List<String> = withContext(Dispatchers.IO) {
         lock.withLock { runCatching { index.popularTags(limit) }.getOrDefault(emptyList()) }
     }

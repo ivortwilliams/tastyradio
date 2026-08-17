@@ -184,15 +184,39 @@ private fun StationRow(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Same card as a search result, minus the add button — tags first because they say
+            // what the station *is*, then the plumbing.
             station.tags?.takeIf { it.isNotBlank() }?.let { tags ->
                 Text(
                     text = tags.replace(",", " · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val facts = listOfNotNull(
+                station.codec?.ifBlank { null },
+                station.bitrate?.takeIf { it > 0 }?.let { "${it}k" },
+                station.country?.ifBlank { null },
+                station.language?.ifBlank { null },
+            )
+            if (facts.isNotEmpty()) {
+                Text(
+                    text = facts.joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Text(
+                text = station.streamUrl,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (live) {
                 Text(
                     text = "in the mix",

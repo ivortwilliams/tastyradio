@@ -47,6 +47,23 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
         // data. This only restores what's already on disk so the UI can say so honestly.
         search.restoreState(appScope)
 
+        // Fill in what older saved stations don't know about themselves. Harmless when the index
+        // isn't downloaded — it simply finds nothing and runs again next launch.
+        appScope.launch {
+            repository.backfillFromIndex { url ->
+                search.lookup(url)?.let { hit ->
+                    StationRepository.DirectoryFacts(
+                        tags = hit.tags,
+                        codec = hit.codec,
+                        bitrate = hit.bitrate,
+                        country = hit.country,
+                        language = hit.language,
+                        favicon = hit.favicon,
+                    )
+                }
+            }
+        }
+
         // Settings that the Mixer reads directly, kept in sync for the life of the process.
         appScope.launch {
             settings.values.collect { values ->

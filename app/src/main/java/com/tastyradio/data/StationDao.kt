@@ -19,6 +19,10 @@ interface StationDao {
     @Query("SELECT * FROM stations WHERE streamUrl = :streamUrl LIMIT 1")
     suspend fun findByUrl(streamUrl: String): Station?
 
+    /** Saved before the directory fields existed, or added by hand. */
+    @Query("SELECT * FROM stations WHERE codec IS NULL OR tags IS NULL")
+    suspend fun missingDirectoryFields(): List<Station>
+
     @Insert
     suspend fun insert(station: Station): Long
 

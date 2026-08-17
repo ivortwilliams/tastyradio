@@ -28,4 +28,13 @@ data class Station(
     val source: String? = null,
     /** Comma-separated, carried over when a station is added from search. Null for older rows. */
     val tags: String? = null,
+    /**
+     * The rest of what the directory knows, so a saved station reads the same as it did in search
+     * results. Null until filled — either on add, or by the backfill that matches older rows
+     * against the index by stream URL.
+     */
+    val codec: String? = null,
+    val bitrate: Int? = null,
+    val country: String? = null,
+    val language: String? = null,
 )

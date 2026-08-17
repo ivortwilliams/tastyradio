@@ -18,6 +18,10 @@ class StationRepository(private val dao: StationDao) {
         sourceUuid: String? = null,
         source: String? = null,
         tags: String? = null,
+        codec: String? = null,
+        bitrate: Int? = null,
+        country: String? = null,
+        language: String? = null,
     ): Station? {
         val url = streamUrl.trim()
         if (url.isEmpty()) return null
@@ -29,6 +33,10 @@ class StationRepository(private val dao: StationDao) {
             sourceUuid = sourceUuid,
             source = source,
             tags = tags?.trim()?.ifEmpty { null },
+            codec = codec?.ifBlank { null },
+            bitrate = bitrate?.takeIf { it > 0 },
+            country = country?.ifBlank { null },
+            language = language?.ifBlank { null },
         )
         return station.copy(id = dao.insert(station))
     }
@@ -41,6 +49,43 @@ class StationRepository(private val dao: StationDao) {
         }
         return added
     }
+
+    /**
+     * Fills in what a saved station doesn't know about itself — tags, codec, bitrate, country,
+     * language — by matching its stream URL against the local index.
+     *
+     * Stations saved before those columns existed would otherwise sit there permanently blank while
+     * the identical station in search results shows a full card. [lookup] returns null when the
+     * index hasn't been downloaded, in which case this does nothing and can run again later.
+     */
+    suspend fun backfillFromIndex(lookup: suspend (String) -> DirectoryFacts?): Int {
+        var filled = 0
+        for (station in dao.missingDirectoryFields()) {
+            val facts = lookup(station.streamUrl) ?: continue
+            dao.update(
+                station.copy(
+                    tags = station.tags ?: facts.tags?.ifBlank { null },
+                    codec = station.codec ?: facts.codec?.ifBlank { null },
+                    bitrate = station.bitrate ?: facts.bitrate?.takeIf { it > 0 },
+                    country = station.country ?: facts.country?.ifBlank { null },
+                    language = station.language ?: facts.language?.ifBlank { null },
+                    imageUrl = station.imageUrl ?: facts.favicon?.ifBlank { null },
+                )
+            )
+            filled++
+        }
+        return filled
+    }
+
+    /** What the index can tell us about a station, without this layer depending on the index. */
+    data class DirectoryFacts(
+        val tags: String?,
+        val codec: String?,
+        val bitrate: Int?,
+        val country: String?,
+        val language: String?,
+        val favicon: String?,
+    )
 
     suspend fun update(station: Station) = dao.update(
         station.copy(name = station.name.trim(), streamUrl = station.streamUrl.trim())

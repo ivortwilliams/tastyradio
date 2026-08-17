@@ -311,6 +311,33 @@ class StationIndex(context: Context) {
         db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
     }
 
+    /** Exact stream-URL lookup, for filling in what a saved station doesn't know about itself. */
+    fun findByUrl(url: String): Hit? =
+        open().prepare(
+            """
+            SELECT name, url, tags, country, language, codec, bitrate, favicon, uuid, source,
+                   lastcheckok
+            FROM station WHERE url = ? LIMIT 1
+            """.trimIndent()
+        ).use { statement ->
+            statement.bindText(1, url)
+            if (!statement.step()) return null
+            Hit(
+                name = statement.getText(0),
+                url = statement.getText(1),
+                tags = statement.getText(2),
+                country = statement.getText(3),
+                language = statement.getText(4),
+                codec = statement.getText(5),
+                bitrate = statement.getLong(6).toInt(),
+                favicon = statement.getText(7),
+                uuid = statement.getText(8),
+                source = statement.getText(9),
+                lastCheckOk = statement.getLong(10) == 1L,
+                score = 0.0,
+            )
+        }
+
     fun count(): Int =
         open().prepare("SELECT COUNT(*) FROM station").use { if (it.step()) it.getLong(0).toInt() else 0 }
 
