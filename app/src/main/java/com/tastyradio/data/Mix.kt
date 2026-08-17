@@ -35,7 +35,9 @@ data class MixChannel(
     val toneLow: Float,
     val toneMid: Float,
     val toneHigh: Float,
-    val toneFilter: Float,
+    val reverb: Float,
+    val delay: Float,
+    val delayMs: Float,
 )
 
 data class MixWithChannels(

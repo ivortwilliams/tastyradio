@@ -193,7 +193,9 @@ fun RootScreen(
                                     low = channel.toneLow,
                                     mid = channel.toneMid,
                                     high = channel.toneHigh,
-                                    filter = channel.toneFilter,
+                                    reverb = channel.reverb,
+                                    delay = channel.delay,
+                                    delayMs = channel.delayMs,
                                 ),
                             )
                         }

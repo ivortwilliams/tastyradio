@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
-@Database(entities = [Station::class, Mix::class, MixChannel::class], version = 4, exportSchema = false)
+@Database(entities = [Station::class, Mix::class, MixChannel::class], version = 5, exportSchema = false)
 abstract class TastyDb : RoomDatabase() {
 
     abstract fun stations(): StationDao
@@ -67,9 +67,50 @@ abstract class TastyDb : RoomDatabase() {
             }
         }
 
+        /**
+         * The DJ filter sweep was cut and reverb and delay took its place. A saved mix keeps its
+         * stations, levels and EQ; the filter position is dropped, and the new effects start at
+         * nothing — which is what "no reverb" means anyway.
+         *
+         * Recreated rather than altered, because the column is going away rather than arriving.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE mix_channels_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        mixId INTEGER NOT NULL,
+                        stationId INTEGER NOT NULL,
+                        fader REAL NOT NULL,
+                        muted INTEGER NOT NULL,
+                        toneLow REAL NOT NULL,
+                        toneMid REAL NOT NULL,
+                        toneHigh REAL NOT NULL,
+                        reverb REAL NOT NULL,
+                        delay REAL NOT NULL,
+                        delayMs REAL NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                connection.execSQL(
+                    """
+                    INSERT INTO mix_channels_new
+                        (id, mixId, stationId, fader, muted, toneLow, toneMid, toneHigh,
+                         reverb, delay, delayMs)
+                    SELECT id, mixId, stationId, fader, muted, toneLow, toneMid, toneHigh,
+                           0.0, 0.0, 400.0
+                    FROM mix_channels
+                    """.trimIndent()
+                )
+                connection.execSQL("DROP TABLE mix_channels")
+                connection.execSQL("ALTER TABLE mix_channels_new RENAME TO mix_channels")
+            }
+        }
+
         fun build(context: Context): TastyDb =
             Room.databaseBuilder(context, TastyDb::class.java, "tasty.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

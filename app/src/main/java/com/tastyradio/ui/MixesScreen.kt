@@ -154,6 +154,8 @@ private fun MixCard(
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
+                // Uncapped: mix names are prefilled from the station names and get long, and the
+                // whole point of a name is telling one mix from another.
                 Text(
                     text = entry.mix.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -163,14 +165,12 @@ private fun MixCard(
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = members.joinToString(" + ") { it.name },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
                 // A mix whose stations were deleted would otherwise just quietly play less.

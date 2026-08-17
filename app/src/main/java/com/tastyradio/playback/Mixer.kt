@@ -68,16 +68,19 @@ class Mixer(private val context: Context) {
      * with each other.
      */
     /**
-     * Per-channel tone. Bands run −1 (killed outright) through 0 (unity) to +1 (boosted);
-     * [filter] is the sweep, −1 (low-pass closed) through 0 (bypassed) to +1 (high-pass closed).
+     * Per-channel tone and space. Bands run −1 (killed outright) through 0 (unity) to +1 (boosted);
+     * [reverb] and [delay] are 0…1 wet amounts, and [delayMs] is the echo time.
      */
     data class Tone(
         val low: Float = 0f,
         val mid: Float = 0f,
         val high: Float = 0f,
-        val filter: Float = 0f,
+        val reverb: Float = 0f,
+        val delay: Float = 0f,
+        val delayMs: Float = ChannelFilters.DEFAULT_DELAY_MS,
     ) {
-        val isFlat: Boolean get() = low == 0f && mid == 0f && high == 0f && filter == 0f
+        val isFlat: Boolean
+            get() = low == 0f && mid == 0f && high == 0f && reverb == 0f && delay == 0f
     }
 
     data class Channel(
@@ -282,7 +285,7 @@ class Mixer(private val context: Context) {
         updateChannel(key) { it.copy(tone = tone) }
         equalisers[key]?.apply {
             setBands(tone.low, tone.mid, tone.high)
-            setSweep(tone.filter)
+            setSpace(tone.reverb, tone.delay, tone.delayMs)
         }
     }
 

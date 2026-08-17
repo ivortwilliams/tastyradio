@@ -272,11 +272,17 @@ private fun ToneControls(
             .fillMaxWidth()
             .padding(start = 16.dp, end = 12.dp, bottom = 10.dp),
     ) {
-        // The sweep first: it's the one you reach for while something is playing.
-        FilterSlider(tone.filter) { onTone(tone.copy(filter = it)) }
         ToneSlider("LOW", tone.low) { onTone(tone.copy(low = it)) }
         ToneSlider("MID", tone.mid) { onTone(tone.copy(mid = it)) }
         ToneSlider("HIGH", tone.high) { onTone(tone.copy(high = it)) }
+        AmountSlider("REV", tone.reverb) { onTone(tone.copy(reverb = it)) }
+        AmountSlider("DLY", tone.delay) { onTone(tone.copy(delay = it)) }
+        // Time is only meaningful once there's an echo to time, so it greys out until there is.
+        TimeSlider(
+            valueMs = tone.delayMs,
+            enabled = tone.delay > 0f,
+            onValue = { onTone(tone.copy(delayMs = it)) },
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
@@ -291,24 +297,19 @@ private fun ToneControls(
     }
 }
 
-/**
- * The DJ filter: one bipolar sweep, off in the middle. Left closes a 24 dB/octave low-pass down
- * over the track, right opens a high-pass up under it, both with a resonant peak at the cutoff.
- *
- * One control rather than two because that's how it's played — you sweep *through* the centre, and
- * having to swap sliders halfway would ruin the gesture.
- */
+/** A plain 0…100% amount: reverb and delay wet level. */
 @Composable
-private fun FilterSlider(
+private fun AmountSlider(
+    label: String,
     value: Float,
     onValue: (Float) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = "FILT",
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = if (value != 0f) {
+            color = if (value > 0f) {
                 MaterialTheme.colorScheme.onPrimaryContainer
             } else {
                 MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
@@ -318,39 +319,60 @@ private fun FilterSlider(
         Slider(
             value = value,
             onValueChange = onValue,
-            valueRange = -1f..1f,
-            // 40 steps: fine enough to sweep smoothly, and an even count puts a stop exactly on
-            // zero so the thumb can find "off".
-            steps = 39,
+            valueRange = 0f..1f,
+            steps = 19,
             modifier = Modifier.weight(1f).height(24.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                activeTrackColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                inactiveTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-            ),
+            colors = mixerSliderColors(),
         )
         Text(
-            text = filterLabel(value),
+            text = if (value <= 0f) "off" else "%.0f%%".format(value * 100),
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.width(46.dp),
         )
     }
 }
 
-/** Names the cutoff rather than the slider position: "LP 400" means more than "-0.55". */
-private fun filterLabel(value: Float): String {
-    if (value == 0f) return "off"
-    val amount = abs(value)
-    val hz = if (value < 0) {
-        20_000f * (120f / 20_000f).pow(amount)
-    } else {
-        20f * (8_000f / 20f).pow(amount)
+/** Delay time, in milliseconds — a slapback at one end, a long wash at the other. */
+@Composable
+private fun TimeSlider(
+    valueMs: Float,
+    enabled: Boolean,
+    onValue: (Float) -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.4f
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "TIME",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = alpha * 0.9f),
+            modifier = Modifier.width(40.dp),
+        )
+        Slider(
+            value = valueMs,
+            onValueChange = onValue,
+            enabled = enabled,
+            valueRange = ChannelFilters.MIN_DELAY_MS..ChannelFilters.MAX_DELAY_MS,
+            modifier = Modifier.weight(1f).height(24.dp),
+            colors = mixerSliderColors(),
+        )
+        Text(
+            text = "%.0f ms".format(valueMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = alpha),
+            modifier = Modifier.width(46.dp),
+        )
     }
-    val name = if (value < 0) "LP" else "HP"
-    return if (hz >= 1000f) "$name %.1fk".format(hz / 1000f) else "$name %.0f".format(hz)
 }
+
+@Composable
+private fun mixerSliderColors() = SliderDefaults.colors(
+    thumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    activeTrackColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    inactiveTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
+    activeTickColor = Color.Transparent,
+    inactiveTickColor = Color.Transparent,
+)
 
 /**
  * One band of the isolator. The bottom of the travel is a full kill, not a −12 dB cut, so the

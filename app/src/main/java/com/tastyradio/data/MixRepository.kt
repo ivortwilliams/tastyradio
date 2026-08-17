@@ -38,7 +38,9 @@ class MixRepository(private val dao: MixDao) {
                     toneLow = channel.tone.low,
                     toneMid = channel.tone.mid,
                     toneHigh = channel.tone.high,
-                    toneFilter = channel.tone.filter,
+                    reverb = channel.tone.reverb,
+                    delay = channel.tone.delay,
+                    delayMs = channel.tone.delayMs,
                 )
             }
         )
