@@ -41,13 +41,17 @@ import kotlinx.coroutines.launch
 
 /**
  * Mixes first, and the tab the app opens on: if saved soundscapes are how you listen, they should
- * be under your thumb the moment the app appears. Stations and Search draw their own glyphs.
+ * be under your thumb the moment the app appears.
+ *
+ * Every tab draws its icon on a fixed-size Canvas. Two of them used to be text characters, whose
+ * slot height comes from the font's line metrics rather than the size you asked for — which sat
+ * those labels visibly lower than their neighbours.
  */
-private enum class Tab(val label: String, val glyph: String) {
-    Mixes("Mixes", ""),
-    Stations("Stations", ""),
-    Search("Search", "⌕"),
-    Settings("Settings", "⚙"),
+private enum class Tab(val label: String) {
+    Mixes("Mixes"),
+    Stations("Stations"),
+    Search("Search"),
+    Settings("Settings"),
 }
 
 /**
@@ -170,10 +174,8 @@ fun RootScreen(
                                 when (entry) {
                                     Tab.Mixes -> FadersGlyph(tint = tint)
                                     Tab.Stations -> RadioGlyph(tint = tint)
-                                    else -> Text(
-                                        entry.glyph,
-                                        style = MaterialTheme.typography.titleLarge,
-                                    )
+                                    Tab.Search -> SearchGlyph(tint = tint)
+                                    Tab.Settings -> SettingsGlyph(tint = tint)
                                 }
                             },
                             label = { Text(entry.label) },

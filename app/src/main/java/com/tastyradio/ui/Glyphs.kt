@@ -24,7 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Hand-drawn glyphs and monogram artwork.
@@ -120,6 +123,49 @@ fun FadersGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurf
                 cornerRadius = CornerRadius(s * 0.045f),
             )
         }
+    }
+}
+
+/** A magnifier: search. */
+@Composable
+fun SearchGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Canvas(modifier = Modifier.size(size)) {
+        val s = this.size.minDimension
+        val stroke = s * 0.085f
+        drawCircle(
+            color = tint,
+            radius = s * 0.27f,
+            center = Offset(s * 0.43f, s * 0.42f),
+            style = Stroke(width = stroke),
+        )
+        drawLine(
+            color = tint,
+            start = Offset(s * 0.63f, s * 0.62f),
+            end = Offset(s * 0.86f, s * 0.85f),
+            strokeWidth = stroke,
+        )
+    }
+}
+
+/** A cog: settings. Teeth drawn as short radial spokes, which stays legible at tab size. */
+@Composable
+fun SettingsGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Canvas(modifier = Modifier.size(size)) {
+        val s = this.size.minDimension
+        val centre = Offset(s * 0.5f, s * 0.5f)
+        // Teeth start *inside* the ring so they read as part of the cog. Drawn clear of it, the
+        // same shape reads as a sun.
+        repeat(8) { index ->
+            val angle = (index * 45f) * PI.toFloat() / 180f
+            drawLine(
+                color = tint,
+                start = Offset(centre.x + cos(angle) * s * 0.20f, centre.y + sin(angle) * s * 0.20f),
+                end = Offset(centre.x + cos(angle) * s * 0.42f, centre.y + sin(angle) * s * 0.42f),
+                strokeWidth = s * 0.13f,
+            )
+        }
+        // The body, over the tooth roots, leaving a hole in the middle.
+        drawCircle(color = tint, radius = s * 0.235f, center = centre, style = Stroke(width = s * 0.16f))
     }
 }
 
