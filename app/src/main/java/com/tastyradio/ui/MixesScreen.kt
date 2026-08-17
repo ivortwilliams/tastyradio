@@ -1,6 +1,9 @@
 package com.tastyradio.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,13 +70,22 @@ fun MixesScreen(
         contentPadding = contentPadding,
     ) {
         items(mixes, key = { it.mix.id }) { entry ->
-            MixCard(
+            SwipeableMixCard(
                 entry = entry,
                 stationsById = stationsById,
                 live = liveMixName == entry.mix.name,
                 onPlay = { onPlay(entry) },
                 onRename = { renaming = entry.mix },
                 onDelete = { deleting = entry.mix },
+            )
+        }
+
+        item {
+            Text(
+                text = "Long-press a mix to rename it · swipe left to delete it",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             )
         }
     }
@@ -119,8 +136,9 @@ fun MixesScreen(
     }
 }
 
+/** Same gestures as the station list: long-press to rename, swipe left to delete. */
 @Composable
-private fun MixCard(
+private fun SwipeableMixCard(
     entry: MixWithChannels,
     stationsById: Map<Long, Station>,
     live: Boolean,
@@ -128,13 +146,62 @@ private fun MixCard(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        // Ask, then delete — and snap back either way, so the list looks right whichever the answer.
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) onDelete()
+            false
+        }
+    )
+
+    Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = false,
+            enableDismissFromEndToStart = true,
+            backgroundContent = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Text(
+                        text = "Delete",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            },
+        ) {
+            MixCard(
+                entry = entry,
+                stationsById = stationsById,
+                live = live,
+                onPlay = onPlay,
+                onRename = onRename,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MixCard(
+    entry: MixWithChannels,
+    stationsById: Map<Long, Station>,
+    live: Boolean,
+    onPlay: () -> Unit,
+    onRename: () -> Unit,
+) {
     val members = entry.channels.mapNotNull { stationsById[it.stationId] }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable(onClick = onPlay),
+            .combinedClickable(onClick = onPlay, onLongClick = onRename),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -183,21 +250,11 @@ private fun MixCard(
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Box(
-                    modifier = Modifier.size(40.dp).clickable(onClick = onPlay),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    PlayGlyph(size = 18.dp, tint = MaterialTheme.colorScheme.primary)
-                }
-                Row {
-                    TextButton(onClick = onRename) {
-                        Text("Rename", style = MaterialTheme.typography.labelSmall)
-                    }
-                    TextButton(onClick = onDelete) {
-                        Text("Delete", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+            Box(
+                modifier = Modifier.size(44.dp).clickable(onClick = onPlay),
+                contentAlignment = Alignment.Center,
+            ) {
+                PlayGlyph(size = 20.dp, tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -215,9 +272,15 @@ private fun EmptyMixes(contentPadding: PaddingValues) {
         Text("No saved mixes yet", style = MaterialTheme.typography.titleMedium)
         Text(
             text = "Start a few stations, balance them how you want, then open the mixer and tap " +
-                "Save mix. It remembers the stations, their levels, mutes and tone — tap it here " +
-                "later and the whole thing comes back.",
+                "Save mix. It remembers the stations, their levels, mutes, tone, reverb and " +
+                "delay — tap it here later and the whole thing comes back.",
             style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = "Saving under a name you've already used replaces that mix, so you can tweak " +
+                "the levels and save again without collecting duplicates.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
