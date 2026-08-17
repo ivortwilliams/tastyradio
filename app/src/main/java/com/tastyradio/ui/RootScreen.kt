@@ -39,10 +39,13 @@ import com.tastyradio.search.SearchRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Mixes first, and the tab the app opens on: if saved soundscapes are how you listen, they should
+ * be under your thumb the moment the app appears. Stations and Search draw their own glyphs.
+ */
 private enum class Tab(val label: String, val glyph: String) {
-    /** Stations draws its own radio; the glyph here is unused for it. */
+    Mixes("Mixes", ""),
     Stations("Stations", ""),
-    Mixes("Mixes", "≡"),
     Search("Search", "⌕"),
     Settings("Settings", "⚙"),
 }
@@ -70,7 +73,7 @@ fun RootScreen(
     settings: Settings,
 ) {
     val settingsValues by settings.values.collectAsStateWithLifecycle(initialValue = Settings.Values())
-    var tab by remember { mutableStateOf(Tab.Stations) }
+    var tab by remember { mutableStateOf(Tab.Mixes) }
     var mixerExpanded by remember { mutableStateOf(false) }
     var showAddStation by remember { mutableStateOf(false) }
     var showSaveMix by remember { mutableStateOf(false) }
@@ -145,16 +148,18 @@ fun RootScreen(
                                 selected = tab == entry,
                                 onClick = { tab = entry },
                                 icon = {
-                                    if (entry == Tab.Stations) {
-                                        RadioGlyph(
-                                            tint = if (tab == entry) {
-                                                MaterialTheme.colorScheme.onSecondaryContainer
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        )
+                                    val tint = if (tab == entry) {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
                                     } else {
-                                        Text(entry.glyph, style = MaterialTheme.typography.titleLarge)
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    when (entry) {
+                                        Tab.Mixes -> FadersGlyph(tint = tint)
+                                        Tab.Stations -> RadioGlyph(tint = tint)
+                                        else -> Text(
+                                            entry.glyph,
+                                            style = MaterialTheme.typography.titleLarge,
+                                        )
                                     }
                                 },
                                 label = { Text(entry.label) },

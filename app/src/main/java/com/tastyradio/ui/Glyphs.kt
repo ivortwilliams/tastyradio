@@ -96,6 +96,33 @@ fun RadioGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurfa
     }
 }
 
+/**
+ * Three faders at different heights: a saved mix *is* a set of fader positions, and it echoes the
+ * app's own launcher icon.
+ */
+@Composable
+fun FadersGlyph(size: Dp = 24.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Canvas(modifier = Modifier.size(size)) {
+        val s = this.size.minDimension
+        val trackWidth = s * 0.055f
+        val positions = listOf(0.22f to 0.62f, 0.5f to 0.34f, 0.78f to 0.52f)
+        positions.forEach { (x, knobY) ->
+            drawLine(
+                color = tint.copy(alpha = 0.55f),
+                start = Offset(s * x, s * 0.14f),
+                end = Offset(s * x, s * 0.86f),
+                strokeWidth = trackWidth,
+            )
+            drawRoundRect(
+                color = tint,
+                topLeft = Offset(s * x - s * 0.15f, s * knobY - s * 0.055f),
+                size = Size(s * 0.30f, s * 0.11f),
+                cornerRadius = CornerRadius(s * 0.045f),
+            )
+        }
+    }
+}
+
 /** A filled circle: record. */
 @Composable
 fun RecordGlyph(size: Dp = 16.dp, tint: Color = Color(0xFFFF5252)) {
