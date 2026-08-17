@@ -159,3 +159,34 @@ account. Worth keeping.
 6. **Expert features behind toggles**, keeping the default surface clean.
 7. **Honest about the plumbing** — showing raw stream URLs and codecs is a feature for this
    audience, not a leak.
+
+---
+
+## Where Tasty Radio deliberately diverges
+
+Transistor is the reference for *feel*, not for *function*. Tasty Radio's whole reason for
+existing is a thing Transistor doesn't do: **playing several stations at once and recording the
+mix**. See [`docs/design/soundscape.md`](../design/soundscape.md) for the full design.
+
+The divergences that matter when reading these screenshots:
+
+- **"Currently playing" is plural.** In `01` the pill shows *the* station. Ours has to show
+  several, so the pill expands into a **mixer sheet** — one row per active station with its own
+  volume fader, mute, and stop. Collapsed, it stays close to Transistor's pill.
+- **The station list shows what's live.** Rows for stations currently in the mix are marked, so
+  the list doubles as an overview of the soundscape.
+- **Tapping play adds to the mix**, it doesn't replace what's playing. This is the single most
+  important behavioural difference — layering has to be one tap or nobody will build soundscapes.
+- **Stop is per-channel *and* master.** Transistor's one stop button becomes stop-this-station
+  plus stop-everything.
+- **A record button** with elapsed time and a live indicator, and a share prompt the moment
+  recording stops.
+- **Track metadata is per-channel.** The second line of Transistor's pill shows one stream's ICY
+  metadata; the expanded mixer shows each channel's own.
+- **Settings gains mixer entries** — concurrent-station cap, the optional 3-band EQ, recording
+  format/location — alongside the Transistor-derived ones in `02` and `04`.
+
+Everything else in these screenshots we're happy to follow closely: the dark full-bleed list,
+circular artwork, ellipsised names, the pill-shaped `+ Add new station` / `⚙ Settings` buttons at
+the end of the list, dynamic colour, expert features behind opt-in toggles, and the
+maintenance/backup philosophy in `05`.
