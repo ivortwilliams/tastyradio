@@ -15,10 +15,13 @@ class MixRepository(private val dao: MixDao) {
      * skipped: there's no id to point at, and silently saving a station you never added would be a
      * surprise later.
      */
-    suspend fun save(name: String, channels: List<Mixer.Channel>): Int {
-        val cleanName = name.trim().ifEmpty { return 0 }
+    /** [replaced] is true when an existing mix of that name was overwritten rather than created. */
+    data class SaveResult(val stations: Int, val replaced: Boolean)
+
+    suspend fun save(name: String, channels: List<Mixer.Channel>): SaveResult {
+        val cleanName = name.trim().ifEmpty { return SaveResult(0, false) }
         val saveable = channels.filter { it.station.id != 0L }
-        if (saveable.isEmpty()) return 0
+        if (saveable.isEmpty()) return SaveResult(0, false)
 
         val existing = dao.findByName(cleanName)
         val mixId = if (existing != null) {
@@ -44,7 +47,7 @@ class MixRepository(private val dao: MixDao) {
                 )
             }
         )
-        return saveable.size
+        return SaveResult(stations = saveable.size, replaced = existing != null)
     }
 
     suspend fun rename(mix: Mix, name: String) {

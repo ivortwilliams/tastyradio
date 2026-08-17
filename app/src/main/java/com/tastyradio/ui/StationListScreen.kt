@@ -52,7 +52,6 @@ fun StationListScreen(
     channels: List<Mixer.Channel>,
     contentPadding: PaddingValues,
     onNotify: (String) -> Unit,
-    onMixChanged: () -> Unit = {},
 ) {
     val stations by repository.stations.collectAsStateWithLifecycle(initialValue = emptyList())
     val liveKeys = channels.map { it.key }.toSet()
@@ -69,7 +68,6 @@ fun StationListScreen(
                 station = station,
                 live = station.channelKey() in liveKeys,
                 onToggle = {
-                    onMixChanged()
                     if (!mixer.toggle(station)) {
                         onNotify(
                             "The mix is full — ${Mixer.MAX_CHANNELS} stations at once. Stop one first."

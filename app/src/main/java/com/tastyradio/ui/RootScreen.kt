@@ -77,7 +77,11 @@ fun RootScreen(
     var mixerExpanded by remember { mutableStateOf(false) }
     var showAddStation by remember { mutableStateOf(false) }
     var showSaveMix by remember { mutableStateOf(false) }
-    /** Which saved mix is on air, so the Mixes tab can mark it. Cleared when the mix is changed. */
+    /**
+     * The mix you're working on. Survives adding and removing stations, because adding a station to
+     * a loaded mix means you're *editing that mix* — the save dialog should still offer its name
+     * rather than making you type it again. Only stopping everything clears it.
+     */
     var liveMixName by remember { mutableStateOf<String?>(null) }
     val channels by mixer.channels.collectAsStateWithLifecycle()
     val mixes by mixRepository.mixes.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -92,6 +96,12 @@ fun RootScreen(
         title = { channels.joinToString(" + ") { it.station.name }.ifEmpty { "Tasty Radio" } },
         onMessage = notify,
     )
+
+    // Stopping everything is the one thing that ends the working mix. Adding and removing stations
+    // is editing it; an empty mixer is not a mix any more.
+    LaunchedEffect(channels.isEmpty()) {
+        if (channels.isEmpty()) liveMixName = null
+    }
 
     // The moment a take stops is the moment you want to send it, so offer that straight away.
     LaunchedEffect(recording) {
@@ -177,8 +187,6 @@ fun RootScreen(
                 channels = channels,
                 contentPadding = padding,
                 onNotify = notify,
-                // Touching a station by hand means you're no longer listening to the saved mix.
-                onMixChanged = { liveMixName = null },
             )
 
             Tab.Mixes -> MixesScreen(
@@ -341,14 +349,19 @@ fun RootScreen(
                     enabled = name.isNotBlank(),
                     onClick = {
                         scope.launch {
-                            val saved = mixRepository.save(name, channels)
+                            val result = mixRepository.save(name, channels)
                             liveMixName = name.trim()
                             showSaveMix = false
                             notify(
-                                if (saved == 0) {
-                                    "Nothing to save — add a station from your collection first."
-                                } else {
-                                    "Saved ${name.trim()} — $saved stations."
+                                when {
+                                    result.stations == 0 ->
+                                        "Nothing to save — add a station from your collection first."
+                                    // Says which of the two things happened, so replacing an
+                                    // existing mix never looks like it made a second one.
+                                    result.replaced ->
+                                        "Updated “${name.trim()}” (${result.stations} stations)"
+                                    else ->
+                                        "Saved “${name.trim()}” (${result.stations} stations)"
                                 }
                             )
                         }
