@@ -7,6 +7,10 @@ file you can send to a friend.**
 Everything Transistor does, Tasty Radio should also do. This document is only about the part
 Transistor doesn't do.
 
+> **Companion document:** [`discovery.md`](discovery.md) covers how stations get *into* the app
+> — the local station index, semantic-ish matching, and the Search page. Read it before touching
+> search, sync or navigation.
+
 ---
 
 ## The vision, in the owner's words
@@ -186,6 +190,29 @@ that; it's the owner's call and not the app's business to police.
 This is where Tasty Radio visibly stops being Transistor. Transistor's bottom pill shows *the*
 station. Ours has to show *several*, with a fader each.
 
+### Navigation: three tabs
+
+Transistor has no navigation at all — the list is the app, with Settings and Add-station as
+pill buttons at the end of it, and search as a popup dialog. Tasty Radio uses a **bottom
+navigation bar with three destinations**:
+
+| Tab | What |
+|---|---|
+| **Stations** | The collection. The home screen |
+| **Search** | Discovery — see [`discovery.md`](discovery.md#the-search-page) |
+| **Settings** | Preferences, mixer options, maintenance |
+
+Search earns a whole page rather than a dialog because discovery here means browsing,
+filtering, comparing and **auditioning a station into the running mix** — none of which fits in
+a modal. The `+ Add new station` and `⚙ Settings` pills at the end of Transistor's list go away;
+both are tabs now.
+
+**The vertical budget is the risk.** Nav bar, collapsed mixer pill, and expanded mixer sheet all
+want the bottom of the screen. Decision: the **collapsed pill sits above the nav bar, and the
+expanded mixer sheet covers it**, with the nav returning on collapse. Verify on the real phone.
+
+### The screens
+
 **Station list (home)** — as Transistor: artwork, name, play button, divider. But rows for
 currently-playing stations are visually marked as live, so the list doubles as an overview of
 what's in the mix.
@@ -210,13 +237,18 @@ station IDs and floats), and it turns a lucky combination into something you kee
 
 Sequenced so the app becomes usable early and each phase is testable on a real phone.
 
+> **Status 2026-08-17: phases 0, 1 and 2 are built and verified on the emulator.** Two concurrent
+> `AudioTrack`s from our UID, both `state:started`, per-channel faders, one audio-focus owner, media
+> notification, and playback surviving the app being backgrounded. Not yet tried on the phone —
+> which is the only place the *balance* can actually be judged. Phase 3 (recording) is next.
+
 | Phase | What | Why here |
 |---|---|---|
-| **0** | Toolchain: install Android SDK, point Gradle at Studio's JBR 21, generate the Gradle/Compose project, get "hello world" onto both the emulator and the phone | Nothing is buildable until the SDK exists |
-| **1** | Room station model, station list UI, **M3U import**, single-station playback through `SoundscapePlayer` + `MediaSessionService`, collapsed playback bar | M3U import first means we seed the owner's real station list straight out of Transistor's own *Export M3U* — real data on day one, no typing URLs |
-| **2** | **The mixer**: player pool, N concurrent stations, per-channel volume/mute, expanded mixer sheet, single audio-focus owner | The reason the app exists |
+| **0** ✅ | Toolchain: install Android SDK, point Gradle at Studio's JBR 21, generate the Gradle/Compose project, get "hello world" onto both the emulator and the phone | Nothing is buildable until the SDK exists |
+| **1** ✅ | Room station model, station list UI, **M3U import**, single-station playback through `SoundscapePlayer` + `MediaSessionService`, collapsed playback bar | M3U import first means we seed the owner's real station list straight out of Transistor's own *Export M3U* — real data on day one, no typing URLs |
+| **2** ✅ | **The mixer**: player pool, N concurrent stations, per-channel volume/mute, expanded mixer sheet, single audio-focus owner | The reason the app exists |
 | **3** | **Recording**: MediaProjection consent, capture, AAC/`MediaMuxer` encode, MediaStore output, share sheet | The second reason the app exists |
-| **4** | Add station by radio-browser.info search and by direct stream URL; station artwork | Convenience, once the app is already worth using |
+| **4** | **Discovery** — three-tab navigation, the multi-source local station index (visible sync, clean, FTS5), the **Search page**, curated packs, add-by-URL, station artwork. Detail in [`discovery.md`](discovery.md) | Convenience, once the app is already worth using — M3U import in phase 1 means search isn't blocking |
 | **5** | Settings (theme, dynamic colour, larger buffer, editing toggles), maintenance (export M3U, backup/restore), **scenes**, **3-band EQ** | Polish and the optional extras |
 
 Phase 1 + 2 is the point at which Transistor can come off the phone.
@@ -234,6 +266,10 @@ Phase 1 + 2 is the point at which Transistor can come off the phone.
   single-stream radio app. Nothing to fix, just don't be surprised.
 - **Device-dependent `audiofx`** — the EQ may simply not work properly on a given phone. It's
   optional; let it be optional.
+- **Bottom-of-screen congestion** — nav bar plus mixer pill plus expanded sheet. See the
+  navigation section above; the resolution is provisional until it's been felt on real hardware.
+- **Discovery risks** (first-run index download, index build time, corpus quality) are listed
+  separately in [`discovery.md`](discovery.md#risks-worth-watching).
 - **`MediaProjection` consent friction** — if the dialog-per-session becomes annoying in real
   use, the fallback is building our own software mixer (all channels into one custom
   `AudioSink`, recording taken from the same buffers). That removes the dialog and the SDK 29

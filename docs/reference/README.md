@@ -96,12 +96,17 @@ A **dialog** (not a full screen) over a dimmed station list, rounded corners, ti
   - `Church Radio (MP3) (MP3 -..` → `http://stream.zeno.fm/k0weys..`
   - `Church Radio (MP3) (MP3 - …` (partially cut off)
 
-This is the **radio-browser.info** API. Two things worth carrying over: results are shown with
-**codec and bitrate**, and the **stream URL is shown directly** — the user is trusted to see
-the plumbing. Also note several results are plain **`http://`**, which matters for Android's
-cleartext policy.
+This is the **radio-browser.info** API, queried live, and — from this result set — searching
+**station names only**. Two things worth carrying over: results are shown with **codec and
+bitrate**, and the **stream URL is shown directly** — the user is trusted to see the plumbing.
+Also note several results are plain **`http://`**, which matters for Android's cleartext policy.
 
 The soft keyboard is open with a **search** action key.
+
+> **This is the screen Tasty Radio changes most.** Name-only search means typing `religion`
+> returns nothing even though Vatican Radio is in the database tagged `catholic, christian,
+> religion`. We replace the dialog with a **full Search page** backed by a **locally downloaded
+> index**. See [`docs/design/discovery.md`](../design/discovery.md).
 
 ---
 
@@ -150,7 +155,8 @@ account. Worth keeping.
 
 ## Takeaways for Tasty Radio
 
-1. **The station list is the app.** One screen does ~90% of the work.
+1. **The station list is the app.** One screen does ~90% of the work — though Tasty Radio adds
+   two more as tabs, see the divergences below.
 2. **Persistent playback pill** at the bottom, present everywhere, showing artwork + station +
    live track metadata, with stop (not pause) and a buffering indicator.
 3. **Material You / dynamic colour**, dark-first.
@@ -166,9 +172,32 @@ account. Worth keeping.
 
 Transistor is the reference for *feel*, not for *function*. Tasty Radio's whole reason for
 existing is a thing Transistor doesn't do: **playing several stations at once and recording the
-mix**. See [`docs/design/soundscape.md`](../design/soundscape.md) for the full design.
+mix**. See [`docs/design/soundscape.md`](../design/soundscape.md) for the full design, and
+[`docs/design/discovery.md`](../design/discovery.md) for search.
 
 The divergences that matter when reading these screenshots:
+
+**Structure**
+
+- **Three tabs, not one screen.** A bottom navigation bar with **Stations**, **Search**,
+  **Settings**. Consequently the `+ Add new station` and `⚙ Settings` pill buttons at the end of
+  the list in `01` **go away** — both are tabs now, and the station list gets simpler for it.
+- **Search is a page, not a dialog.** `03`'s "Find Station" popup becomes a full screen with an
+  empty state that's worth looking at (tag chips, browse by country, popular now, a curated
+  public-broadcaster pack), filters, and results that stay put while you work.
+- **Search is local, not live.** The station corpus is downloaded, cleaned and indexed on the
+  phone (FTS5), refreshed weekly on Wi-Fi. Instant, offline, private, and rankable by us — and
+  drawn from **several sources**, not just radio-browser, with bundled curated packs covering
+  the spoken-word and public-broadcaster material that community tagging handles worst.
+- **Sync is visible.** A progress indicator while syncing and a "last synced" time, on the
+  Search page and in Settings — never a silent background mutation of what you're searching.
+- **Search covers more than names.** Name, tags, country, language, homepage — plus a synonym
+  expansion learned from tag co-occurrence in the corpus, shown as removable chips. `religion`
+  finds *Radio Vaticana*.
+- **Audition into the mix.** ▶ on a search result plays it *as a channel over what's already
+  playing*, at low volume, without adding it. The only honest way to judge a layer.
+
+**Playback**
 
 - **"Currently playing" is plural.** In `01` the pill shows *the* station. Ours has to show
   several, so the pill expands into a **mixer sheet** — one row per active station with its own
@@ -183,10 +212,11 @@ The divergences that matter when reading these screenshots:
   recording stops.
 - **Track metadata is per-channel.** The second line of Transistor's pill shows one stream's ICY
   metadata; the expanded mixer shows each channel's own.
-- **Settings gains mixer entries** — concurrent-station cap, the optional 3-band EQ, recording
-  format/location — alongside the Transistor-derived ones in `02` and `04`.
+- **Settings gains mixer and index entries** — concurrent-station cap, the optional 3-band EQ,
+  recording format/location, and a **Station index** section (last sync time, per-source station
+  counts, refresh frequency, index size, *Sync now*, *Clear index*) — alongside the
+  Transistor-derived ones in `02` and `04`.
 
 Everything else in these screenshots we're happy to follow closely: the dark full-bleed list,
-circular artwork, ellipsised names, the pill-shaped `+ Add new station` / `⚙ Settings` buttons at
-the end of the list, dynamic colour, expert features behind opt-in toggles, and the
-maintenance/backup philosophy in `05`.
+circular artwork, ellipsised names, dynamic colour, expert features behind opt-in toggles, the
+honesty about stream URLs and codecs in `03`, and the maintenance/backup philosophy in `05`.

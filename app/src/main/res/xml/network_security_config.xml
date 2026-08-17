@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Internet radio is full of plain http:// streams — several of the owner's own stations are
+    cleartext. Android blocks cleartext by default from API 28, and the failure is silent, so
+    permitting it is not optional for a radio app.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,47 @@
+package com.tastyradio
+
+import android.app.Application
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.crossfade
+import com.tastyradio.data.StationRepository
+import com.tastyradio.data.TastyDb
+import com.tastyradio.playback.Mixer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+/**
+ * Application-scoped singletons. No dependency-injection framework: this is a radio player, and
+ * three objects do not need a container.
+ *
+ * The [Mixer] lives here rather than in the playback service because both the UI and the service
+ * need the same instance.
+ */
+class TastyRadioApp : Application(), SingletonImageLoader.Factory {
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val database by lazy { TastyDb.build(this) }
+    val repository by lazy { StationRepository(database.stations()) }
+    val mixer by lazy { Mixer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        appScope.launch { repository.seedIfEmpty() }
+    }
+
+    /**
+     * Station artwork is fetched over the network and cached by Coil. Declared explicitly rather
+     * than left to service discovery, so it's obvious where the fetcher comes from — and plenty of
+     * favicon URLs are cleartext `http://`, which the network security config already permits.
+     */
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory()) }
+            .crossfade(true)
+            .build()
+}
