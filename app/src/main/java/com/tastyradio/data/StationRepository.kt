@@ -17,6 +17,7 @@ class StationRepository(private val dao: StationDao) {
         imageUrl: String? = null,
         sourceUuid: String? = null,
         source: String? = null,
+        tags: String? = null,
     ): Station? {
         val url = streamUrl.trim()
         if (url.isEmpty()) return null
@@ -27,6 +28,7 @@ class StationRepository(private val dao: StationDao) {
             imageUrl = imageUrl,
             sourceUuid = sourceUuid,
             source = source,
+            tags = tags?.trim()?.ifEmpty { null },
         )
         return station.copy(id = dao.insert(station))
     }

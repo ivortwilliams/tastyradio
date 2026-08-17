@@ -171,6 +171,8 @@ private fun StationRow(
         StationArtwork(name = station.name, imageUrl = station.imageUrl, live = live)
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
+            // Wrapped, not truncated: station names carry their distinguishing detail at the end
+            // ("… Nhulunbuy NT", "… Gregorian Chants"), so cutting them hides the useful half.
             Text(
                 text = station.name,
                 style = MaterialTheme.typography.titleMedium,
@@ -179,9 +181,18 @@ private fun StationRow(
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
-                maxLines = 1,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
+            station.tags?.takeIf { it.isNotBlank() }?.let { tags ->
+                Text(
+                    text = tags.replace(",", " · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (live) {
                 Text(
                     text = "in the mix",

@@ -68,8 +68,8 @@ class Mixer(private val context: Context) {
      * with each other.
      */
     /**
-     * Per-channel tone. The three bands are −12…+12 dB shelves for balance; [filter] is the DJ
-     * sweep, −1 (low-pass closed) through 0 (bypassed) to +1 (high-pass closed).
+     * Per-channel tone. Bands run −1 (killed outright) through 0 (unity) to +1 (boosted);
+     * [filter] is the sweep, −1 (low-pass closed) through 0 (bypassed) to +1 (high-pass closed).
      */
     data class Tone(
         val low: Float = 0f,
@@ -103,7 +103,7 @@ class Mixer(private val context: Context) {
     private val players = LinkedHashMap<String, ExoPlayer>()
 
     /** One tone control per channel, living inside that player's audio pipeline. */
-    private val equalisers = mutableMapOf<String, ThreeBandEqualiser>()
+    private val equalisers = mutableMapOf<String, ChannelFilters>()
 
     private val _channels = MutableStateFlow<List<Channel>>(emptyList())
     val channels: StateFlow<List<Channel>> = _channels.asStateFlow()
@@ -165,7 +165,7 @@ class Mixer(private val context: Context) {
             startPlaybackService()
         }
 
-        val equaliser = ThreeBandEqualiser()
+        val equaliser = ChannelFilters()
         equalisers[key] = equaliser
         val player = buildPlayer(equaliser)
         players[key] = player
@@ -259,8 +259,8 @@ class Mixer(private val context: Context) {
     fun setTone(key: String, tone: Tone) {
         updateChannel(key) { it.copy(tone = tone) }
         equalisers[key]?.apply {
-            setGains(tone.low, tone.mid, tone.high)
-            setFilter(tone.filter)
+            setBands(tone.low, tone.mid, tone.high)
+            setSweep(tone.filter)
         }
     }
 
@@ -275,7 +275,7 @@ class Mixer(private val context: Context) {
 
     // ---------------------------------------------------------------- plumbing
 
-    private fun buildPlayer(equaliser: ThreeBandEqualiser): ExoPlayer {
+    private fun buildPlayer(equaliser: ChannelFilters): ExoPlayer {
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
             // Radio URLs redirect constantly, including http -> https, which is cross-protocol.

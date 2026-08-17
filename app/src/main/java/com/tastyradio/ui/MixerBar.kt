@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tastyradio.playback.ChannelFilters
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 
@@ -341,6 +342,10 @@ private fun filterLabel(value: Float): String {
     return if (hz >= 1000f) "$name %.1fk".format(hz / 1000f) else "$name %.0f".format(hz)
 }
 
+/**
+ * One band of the isolator. The bottom of the travel is a full kill, not a −12 dB cut, so the
+ * readout says "kill" rather than a number you'd have to interpret.
+ */
 @Composable
 private fun ToneSlider(
     label: String,
@@ -352,14 +357,19 @@ private fun ToneSlider(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
+            color = if (value != 0f) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            },
             modifier = Modifier.width(40.dp),
         )
         Slider(
             value = value,
             onValueChange = onValue,
-            valueRange = -12f..12f,
-            // 24 steps of 1 dB: fine enough to be useful, coarse enough to land on zero.
-            steps = 23,
+            valueRange = -1f..1f,
+            // An even number of steps puts a stop exactly on unity, so "flat" is findable by thumb.
+            steps = 39,
             modifier = Modifier.weight(1f).height(24.dp),
             colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -370,11 +380,23 @@ private fun ToneSlider(
             ),
         )
         Text(
-            text = if (value == 0f) "0" else "%+.0f".format(value),
+            text = bandLabel(value),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.width(32.dp),
+            color = if (value <= -0.995f) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            },
+            modifier = Modifier.width(46.dp),
         )
     }
+}
+
+private fun bandLabel(value: Float): String = when {
+    value <= -0.995f -> "kill"
+    value == 0f -> "0"
+    value < 0f -> "%.0f".format(value * ChannelFilters.CUT_RANGE_DB)
+    else -> "+%.0f".format(value * ChannelFilters.MAX_BOOST_DB)
 }
 
 @Composable

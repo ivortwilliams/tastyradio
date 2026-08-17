@@ -97,9 +97,14 @@ fun RootScreen(
         snackbarHost = { SnackbarHost(snackbars) },
         bottomBar = {
             Column {
+                // Derived, never trusted from state alone: stopping the last station while the
+                // sheet was open used to leave `mixerExpanded` true with no pill left to collapse
+                // it, so the navigation bar vanished with no way back.
+                val sheetExpanded = mixerExpanded && channels.isNotEmpty()
+
                 MixerBar(
                     channels = channels,
-                    expanded = mixerExpanded,
+                    expanded = sheetExpanded,
                     onExpandedChange = { mixerExpanded = it },
                     onFader = mixer::setFader,
                     onMute = mixer::setMuted,
@@ -116,7 +121,7 @@ fun RootScreen(
                         }
                     },
                 )
-                if (!mixerExpanded) {
+                if (!sheetExpanded) {
                     NavigationBar {
                         Tab.entries.forEach { entry ->
                             NavigationBarItem(
@@ -172,6 +177,7 @@ fun RootScreen(
                             imageUrl = hit.favicon.ifBlank { null },
                             sourceUuid = hit.uuid.ifBlank { null },
                             source = hit.source,
+                            tags = hit.tags,
                         )
                         notify(
                             if (added == null) "Already in your collection." else "Added ${hit.name}."

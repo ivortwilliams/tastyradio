@@ -26,4 +26,6 @@ data class Station(
     val sourceUuid: String? = null,
     /** Which directory: `radio-browser`, a curated pack name, `somafm`, `manual`, `import`. */
     val source: String? = null,
+    /** Comma-separated, carried over when a station is added from search. Null for older rows. */
+    val tags: String? = null,
 )
