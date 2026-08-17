@@ -25,6 +25,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,8 +60,12 @@ fun MixerBar(
     onRetry: (String) -> Unit,
     recording: Recorder.State,
     onToggleRecording: () -> Unit,
+    onTone: (String, Mixer.Tone) -> Unit,
 ) {
     if (channels.isEmpty()) return
+    // One channel's tone controls open at a time: four channels' worth at once would fill the
+    // screen, and you balance one against the others anyway.
+    var toneOpenFor by remember { mutableStateOf<String?>(null) }
 
     Surface(
         modifier = Modifier
@@ -90,14 +95,21 @@ fun MixerBar(
                     channels.forEach { channel ->
                         ChannelRow(
                             channel = channel,
+                            toneOpen = toneOpenFor == channel.key,
+                            onToggleTone = {
+                                toneOpenFor = if (toneOpenFor == channel.key) null else channel.key
+                            },
                             onFader = { onFader(channel.key, it) },
                             onMute = { onMute(channel.key, it) },
                             onStop = { onStopChannel(channel.key) },
                             onRetry = { onRetry(channel.key) },
                         )
-                    }
-                    if (recording is Recorder.State.Recording) {
-                        RecordingRow(recording)
+                        AnimatedVisibility(visible = toneOpenFor == channel.key) {
+                            ToneControls(
+                                tone = channel.tone,
+                                onTone = { onTone(channel.key, it) },
+                            )
+                        }
                     }
                     if (channels.size < Mixer.MAX_CHANNELS) {
                         Text(
@@ -162,11 +174,14 @@ private fun CollapsedRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // The elapsed time lives on this line rather than in a row of its own: an extra row
+            // grows the sheet, and because the sheet is anchored to the bottom of the screen that
+            // moves the record button out from under your thumb mid-take.
             Text(
-                text = if (connecting && channels.none { it.state == Mixer.ChannelState.Playing }) {
-                    "Connecting…"
-                } else {
-                    subtitle
+                text = when {
+                    recording is Recorder.State.Recording -> "● ${elapsed(recording.startedAtMs)} · $subtitle"
+                    connecting && channels.none { it.state == Mixer.ChannelState.Playing } -> "Connecting…"
+                    else -> subtitle
                 },
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
@@ -216,29 +231,83 @@ private fun CollapsedRow(
     }
 }
 
-/** Elapsed time while recording — the one number you want while a take is running. */
+/** Ticking elapsed time for the take in progress. */
 @Composable
-private fun RecordingRow(recording: Recorder.State.Recording) {
-    var elapsed by remember(recording.startedAtMs) { mutableStateOf(0L) }
-    LaunchedEffect(recording.startedAtMs) {
+private fun elapsed(startedAtMs: Long): String {
+    var now by remember(startedAtMs) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(startedAtMs) {
         while (true) {
-            elapsed = System.currentTimeMillis() - recording.startedAtMs
+            now = System.currentTimeMillis()
             delay(500)
         }
     }
-    val seconds = elapsed / 1000
-    Row(
+    val seconds = ((now - startedAtMs) / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(seconds / 60, seconds % 60)
+}
+
+/**
+ * Low / mid / high, each −12…+12 dB. Detents at zero so "flat" is findable by thumb, and a Flat
+ * button because undoing three sliders by hand is annoying.
+ */
+@Composable
+private fun ToneControls(
+    tone: Mixer.Tone,
+    onTone: (Mixer.Tone) -> Unit,
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = 16.dp, end = 12.dp, bottom = 10.dp),
     ) {
-        RecordGlyph(size = 12.dp)
-        Spacer(Modifier.width(8.dp))
+        ToneSlider("LOW", tone.low) { onTone(tone.copy(low = it)) }
+        ToneSlider("MID", tone.mid) { onTone(tone.copy(mid = it)) }
+        ToneSlider("HIGH", tone.high) { onTone(tone.copy(high = it)) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = { onTone(Mixer.Tone()) },
+                enabled = !tone.isFlat,
+            ) {
+                Text("Flat", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToneSlider(
+    label: String,
+    value: Float,
+    onValue: (Float) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = "Recording  %d:%02d".format(seconds / 60, seconds % 60),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(40.dp),
+        )
+        Slider(
+            value = value,
+            onValueChange = onValue,
+            valueRange = -12f..12f,
+            // 24 steps of 1 dB: fine enough to be useful, coarse enough to land on zero.
+            steps = 23,
+            modifier = Modifier.weight(1f).height(24.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                activeTrackColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                inactiveTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
+        Text(
+            text = if (value == 0f) "0" else "%+.0f".format(value),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(32.dp),
         )
     }
 }
@@ -246,6 +315,8 @@ private fun RecordingRow(recording: Recorder.State.Recording) {
 @Composable
 private fun ChannelRow(
     channel: Mixer.Channel,
+    toneOpen: Boolean,
+    onToggleTone: () -> Unit,
     onFader: (Float) -> Unit,
     onMute: (Boolean) -> Unit,
     onStop: () -> Unit,
@@ -301,6 +372,25 @@ private fun ChannelRow(
             )
         }
         Spacer(Modifier.width(4.dp))
+        // "EQ" opens this channel's tone controls; it lights up when the channel isn't flat, so a
+        // shaped channel is visible without opening it.
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clickable(onClick = onToggleTone),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "EQ",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (toneOpen || !channel.tone.isFlat) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
+                },
+            )
+        }
         // "M" for mute is what a mixing desk actually labels it.
         Box(
             modifier = Modifier

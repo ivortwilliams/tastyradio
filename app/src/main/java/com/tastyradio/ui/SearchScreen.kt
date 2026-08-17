@@ -348,39 +348,36 @@ private fun ResultRow(
         StationArtwork(name = hit.name, imageUrl = hit.favicon.ifBlank { null }, size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
+            // The full name, wrapped rather than cut: station names carry the useful detail at the
+            // end ("… (AAC+ 128k)", "… Nhulunbuy NT"), so truncating them hides the distinguishing
+            // part. Codec and bitrate moved to their own line for the same reason.
             Text(
-                text = buildString {
-                    append(hit.name)
-                    if (hit.codec.isNotBlank() || hit.bitrate > 0) {
-                        append(" (")
-                        append(hit.codec.ifBlank { "?" })
-                        if (hit.bitrate > 0) append(" · ${hit.bitrate}k")
-                        append(")")
-                    }
-                },
+                text = hit.name,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
             if (hit.tags.isNotBlank()) {
-                // Tags explain *why* this result matched.
+                // Tags explain *why* this result matched, so they're worth the vertical space.
                 Text(
                     text = hit.tags.replace(",", " · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Text(
                 text = listOfNotNull(
+                    hit.codec.ifBlank { null },
+                    if (hit.bitrate > 0) "${hit.bitrate}k" else null,
                     hit.country.ifBlank { null },
                     hit.language.ifBlank { null },
                     if (!hit.lastCheckOk) "unreachable" else null,
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             // Transistor's honesty about the plumbing: show the raw stream URL.

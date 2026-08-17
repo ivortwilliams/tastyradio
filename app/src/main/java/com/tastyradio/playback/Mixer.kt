@@ -19,8 +19,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.tastyradio.data.Station
@@ -64,9 +67,15 @@ class Mixer(private val context: Context) {
      * unsaved station has `id = 0`. Keying on the id would make all auditioned stations collide
      * with each other.
      */
+    /** Three bands, each −12…+12 dB, where 0 is flat. */
+    data class Tone(val low: Float = 0f, val mid: Float = 0f, val high: Float = 0f) {
+        val isFlat: Boolean get() = low == 0f && mid == 0f && high == 0f
+    }
+
     data class Channel(
         val key: String,
         val station: Station,
+        val tone: Tone = Tone(),
         val fader: Float = DEFAULT_FADER,
         val muted: Boolean = false,
         val state: ChannelState = ChannelState.Connecting,
@@ -84,6 +93,9 @@ class Mixer(private val context: Context) {
 
     /** Insertion-ordered so the mixer rows don't jump around as channels come and go. */
     private val players = LinkedHashMap<String, ExoPlayer>()
+
+    /** One tone control per channel, living inside that player's audio pipeline. */
+    private val equalisers = mutableMapOf<String, ThreeBandEqualiser>()
 
     private val _channels = MutableStateFlow<List<Channel>>(emptyList())
     val channels: StateFlow<List<Channel>> = _channels.asStateFlow()
@@ -145,7 +157,9 @@ class Mixer(private val context: Context) {
             startPlaybackService()
         }
 
-        val player = buildPlayer()
+        val equaliser = ThreeBandEqualiser()
+        equalisers[key] = equaliser
+        val player = buildPlayer(equaliser)
         players[key] = player
         _channels.update { it + Channel(key = key, station = station, fader = fader) }
 
@@ -160,6 +174,7 @@ class Mixer(private val context: Context) {
 
     fun stop(key: String) {
         watchdogs.remove(key)?.cancel()
+        equalisers.remove(key)
         players.remove(key)?.release()
         _channels.update { list -> list.filterNot { it.key == key } }
         if (players.isEmpty()) releaseFocusAndReceiver()
@@ -168,6 +183,7 @@ class Mixer(private val context: Context) {
     fun stopAll() {
         watchdogs.values.forEach { it.cancel() }
         watchdogs.clear()
+        equalisers.clear()
         players.values.forEach { it.release() }
         players.clear()
         _channels.value = emptyList()
@@ -228,6 +244,15 @@ class Mixer(private val context: Context) {
         applyVolumes()
     }
 
+    /**
+     * Tone is applied *before* the fader, which is the order a mixing desk uses: shaping a channel
+     * shouldn't change how loud it sits in the mix.
+     */
+    fun setTone(key: String, tone: Tone) {
+        updateChannel(key) { it.copy(tone = tone) }
+        equalisers[key]?.setGains(tone.low, tone.mid, tone.high)
+    }
+
 
     private fun applyVolumes() {
         val duck = if (ducking) DUCK_FACTOR else 1f
@@ -239,7 +264,7 @@ class Mixer(private val context: Context) {
 
     // ---------------------------------------------------------------- plumbing
 
-    private fun buildPlayer(): ExoPlayer {
+    private fun buildPlayer(equaliser: ThreeBandEqualiser): ExoPlayer {
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
             // Radio URLs redirect constantly, including http -> https, which is cross-protocol.
@@ -257,7 +282,19 @@ class Mixer(private val context: Context) {
             // indefinite silent retry loop.
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
-        return ExoPlayer.Builder(context)
+        // The tone control goes into this player's own sink, so it's applied before the audio ever
+        // leaves the app — which is also what puts it in the recording.
+        val renderersFactory = object : DefaultRenderersFactory(context) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf(equaliser))
+                .build()
+        }
+
+        return ExoPlayer.Builder(context, renderersFactory)
             .setLoadControl(buildLoadControl())
             .setMediaSourceFactory(mediaSourceFactory)
             // false: this Mixer is the single audio-focus owner. See the class comment.

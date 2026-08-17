@@ -106,6 +106,7 @@ fun RootScreen(
                     onStopChannel = mixer::stop,
                     onStopAll = mixer::stopAll,
                     onRetry = mixer::retry,
+                    onTone = mixer::setTone,
                     recording = recording,
                     onToggleRecording = {
                         if (recording is Recorder.State.Recording) {
