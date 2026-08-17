@@ -1,0 +1,43 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+.cxx/
+release/
+output.json
+
+# Keystores / signing — never commit these
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.navigation/
+
+# Kotlin
+.kotlin/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env / secrets
+.env
+.env.*
+!.env.example
