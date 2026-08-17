@@ -8,22 +8,24 @@ another radio app 'Transistor'."*
 They are a **reference for feel and feature set, not a pixel spec** — Tasty Radio is its own
 app, not a clone.
 
-> **⚠️ Image files not yet in the repo.** The screenshots were shared in chat, not as files on
-> disk, so the PNGs themselves could not be written here automatically. Drop them into this
-> folder using the filenames below and they'll line up with the write-ups. The written
-> breakdown below is complete on its own in the meantime.
+| File | Screen | |
+|---|---|---|
+| [`01-station-list.jpg`](01-station-list.jpg) | Main station list + playback bar | ✅ |
+| [`02-settings-general.jpg`](02-settings-general.jpg) | Settings → General | ✅ |
+| [`03-find-station.jpg`](03-find-station.jpg) | "Find Station" search dialog | ✅ |
+| [`04-settings-advanced.jpg`](04-settings-advanced.jpg) | Settings → buffer / editing / About | ✅ |
+| `05-settings-maintenance.jpg` | Settings → Maintenance | ❌ **missing** |
 
-| File | Screen |
-|---|---|
-| `01-station-list.png` | Main station list + playback bar |
-| `02-settings-general.png` | Settings → General |
-| `03-find-station.png` | "Find Station" search dialog |
-| `04-settings-advanced.png` | Settings → buffer / editing / About |
-| `05-settings-maintenance.png` | Settings → Maintenance |
+> **⚠️ Screenshot 05 is missing.** The source file saved as 0 bytes, so only the written
+> breakdown below survives for that screen. It's the least design-critical of the five (a
+> plain preference list), but re-capture it if the Maintenance screen ever needs to be
+> matched precisely.
 
 ---
 
 ## 01 — Station list (the home screen)
+
+<img src="01-station-list.jpg" width="280" alt="Transistor station list with playback bar">
 
 A full-bleed dark screen, no top app bar visible while scrolled. A simple vertical list of
 stations, each row being:
@@ -63,6 +65,8 @@ This bar persists across screens — it's still there on top of the Settings scr
 
 ## 02 — Settings → General
 
+<img src="02-settings-general.jpg" width="280" alt="Settings, General section">
+
 Standard scrolling preference list. Back arrow + "Settings" title. Section header **General**
 in the accent colour. Each row: leading icon, title, supporting description, trailing switch.
 
@@ -76,6 +80,8 @@ Then the **Maintenance** section begins (see `05`).
 ---
 
 ## 03 — Find Station (search)
+
+<img src="03-find-station.jpg" width="280" alt="Find Station search dialog with results">
 
 A **dialog** (not a full screen) over a dimmed station list, rounded corners, titled
 **"Find Station"**. Inside:
@@ -101,6 +107,8 @@ The soft keyboard is open with a **search** action key.
 
 ## 04 — Settings → buffer, editing, About
 
+<img src="04-settings-advanced.jpg" width="280" alt="Settings: buffer, editing toggles, About">
+
 Continuing down the settings list:
 
 - **Use Larger Buffer** — "Larger buffer for playing a radio stream enabled. It may take
@@ -121,6 +129,8 @@ clean.
 ---
 
 ## 05 — Settings → Maintenance
+
+*(Image missing — source file was 0 bytes. Written from the original screenshot.)*
 
 Section header **Maintenance**:
 
