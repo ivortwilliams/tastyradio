@@ -33,6 +33,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.pow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -259,6 +261,8 @@ private fun ToneControls(
             .fillMaxWidth()
             .padding(start = 16.dp, end = 12.dp, bottom = 10.dp),
     ) {
+        // The sweep first: it's the one you reach for while something is playing.
+        FilterSlider(tone.filter) { onTone(tone.copy(filter = it)) }
         ToneSlider("LOW", tone.low) { onTone(tone.copy(low = it)) }
         ToneSlider("MID", tone.mid) { onTone(tone.copy(mid = it)) }
         ToneSlider("HIGH", tone.high) { onTone(tone.copy(high = it)) }
@@ -274,6 +278,67 @@ private fun ToneControls(
             }
         }
     }
+}
+
+/**
+ * The DJ filter: one bipolar sweep, off in the middle. Left closes a 24 dB/octave low-pass down
+ * over the track, right opens a high-pass up under it, both with a resonant peak at the cutoff.
+ *
+ * One control rather than two because that's how it's played — you sweep *through* the centre, and
+ * having to swap sliders halfway would ruin the gesture.
+ */
+@Composable
+private fun FilterSlider(
+    value: Float,
+    onValue: (Float) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "FILT",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (value != 0f) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            },
+            modifier = Modifier.width(40.dp),
+        )
+        Slider(
+            value = value,
+            onValueChange = onValue,
+            valueRange = -1f..1f,
+            // 40 steps: fine enough to sweep smoothly, and an even count puts a stop exactly on
+            // zero so the thumb can find "off".
+            steps = 39,
+            modifier = Modifier.weight(1f).height(24.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                activeTrackColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                inactiveTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
+        Text(
+            text = filterLabel(value),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(46.dp),
+        )
+    }
+}
+
+/** Names the cutoff rather than the slider position: "LP 400" means more than "-0.55". */
+private fun filterLabel(value: Float): String {
+    if (value == 0f) return "off"
+    val amount = abs(value)
+    val hz = if (value < 0) {
+        20_000f * (120f / 20_000f).pow(amount)
+    } else {
+        20f * (8_000f / 20f).pow(amount)
+    }
+    val name = if (value < 0) "LP" else "HP"
+    return if (hz >= 1000f) "$name %.1fk".format(hz / 1000f) else "$name %.0f".format(hz)
 }
 
 @Composable

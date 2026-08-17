@@ -40,6 +40,9 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
     @Volatile private var lowDb: Float = 0f
     @Volatile private var midDb: Float = 0f
     @Volatile private var highDb: Float = 0f
+
+    /** −1 = low-pass fully closed, 0 = bypassed, +1 = high-pass fully closed. */
+    @Volatile private var filter: Float = 0f
     @Volatile private var dirty: Boolean = true
 
     private var channelCount = 0
@@ -50,10 +53,21 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
     private var mid: Array<Biquad> = emptyArray()
     private var high: Array<Biquad> = emptyArray()
 
+    /** The sweep: two cascaded biquads per channel, for 24 dB/octave. */
+    private var sweepA: Array<Biquad> = emptyArray()
+    private var sweepB: Array<Biquad> = emptyArray()
+
+    @Volatile private var sweepActive = false
+
     fun setGains(lowDb: Float, midDb: Float, highDb: Float) {
         this.lowDb = lowDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
         this.midDb = midDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
         this.highDb = highDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
+        dirty = true
+    }
+
+    fun setFilter(position: Float) {
+        filter = position.coerceIn(-1f, 1f)
         dirty = true
     }
 
@@ -67,6 +81,8 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
         low = Array(channelCount) { Biquad() }
         mid = Array(channelCount) { Biquad() }
         high = Array(channelCount) { Biquad() }
+        sweepA = Array(channelCount) { Biquad() }
+        sweepB = Array(channelCount) { Biquad() }
         dirty = true
         return inputAudioFormat
     }
@@ -87,6 +103,10 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
             sample = low[channel].process(sample)
             sample = mid[channel].process(sample)
             sample = high[channel].process(sample)
+            if (sweepActive) {
+                sample = sweepA[channel].process(sample)
+                sample = sweepB[channel].process(sample)
+            }
             // Boosting can push past full scale; clamp rather than let it wrap into noise.
             output.putShort(sample.coerceIn(-32768f, 32767f).toInt().toShort())
             channel = (channel + 1) % channelCount
@@ -100,12 +120,16 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
         low.forEach { it.reset() }
         mid.forEach { it.reset() }
         high.forEach { it.reset() }
+        sweepA.forEach { it.reset() }
+        sweepB.forEach { it.reset() }
     }
 
     override fun onReset() {
         low = emptyArray()
         mid = emptyArray()
         high = emptyArray()
+        sweepA = emptyArray()
+        sweepB = emptyArray()
     }
 
     private fun recompute() {
@@ -117,6 +141,34 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
             low[index].setCoefficients(lowCoefficients)
             mid[index].setCoefficients(midCoefficients)
             high[index].setCoefficients(highCoefficients)
+        }
+
+        // The sweep. Off in the middle, and only then is it truly bypassed — a "neutral" filter
+        // still colours the sound, so at zero the stages are skipped entirely.
+        val position = filter
+        sweepActive = kotlin.math.abs(position) > 0.02f
+        if (!sweepActive) {
+            sweepA.forEach { it.reset() }
+            sweepB.forEach { it.reset() }
+            return
+        }
+
+        val amount = kotlin.math.abs(position)
+        val nyquistLimit = sampleRate * 0.45f
+        val (first, second) = if (position < 0) {
+            // Low-pass sweeping down from the top of the band.
+            val cutoff = (LP_OPEN_HZ * (LP_CLOSED_HZ / LP_OPEN_HZ).pow(amount))
+                .coerceAtMost(nyquistLimit)
+            lowPass(cutoff, Q_BUTTERWORTH, sampleRate) to lowPass(cutoff, Q_RESONANT, sampleRate)
+        } else {
+            // High-pass sweeping up from the bottom.
+            val cutoff = (HP_OPEN_HZ * (HP_CLOSED_HZ / HP_OPEN_HZ).pow(amount))
+                .coerceAtMost(nyquistLimit)
+            highPass(cutoff, Q_BUTTERWORTH, sampleRate) to highPass(cutoff, Q_RESONANT, sampleRate)
+        }
+        for (index in sweepA.indices) {
+            sweepA[index].setCoefficients(first)
+            sweepB[index].setCoefficients(second)
         }
     }
 
@@ -156,6 +208,49 @@ class ThreeBandEqualiser : BaseAudioProcessor() {
         const val MID_HZ = 1_500f
         const val MID_Q = 0.9f
         const val HIGH_HZ = 4_000f
+
+        /**
+         * The sweep range, travelled logarithmically because pitch is logarithmic — a linear sweep
+         * spends most of its travel in the top octave doing nothing audible.
+         */
+        const val LP_OPEN_HZ = 20_000f
+        const val LP_CLOSED_HZ = 120f
+        const val HP_OPEN_HZ = 20f
+        const val HP_CLOSED_HZ = 8_000f
+
+        /**
+         * Two cascaded stages give 24 dB/octave — steep enough to actually remove a band rather
+         * than tilt it. The second stage runs a high Q, which is where the resonant bite at the
+         * cutoff comes from: that peak is the sound people mean by a DJ filter.
+         */
+        const val Q_BUTTERWORTH = 0.707f
+        const val Q_RESONANT = 2.2f
+
+        fun lowPass(frequency: Float, q: Float, sampleRate: Int): FloatArray {
+            val w0 = 2.0 * Math.PI * frequency / sampleRate
+            val cosW0 = cos(w0)
+            val alpha = sin(w0) / (2.0 * q)
+            val b0 = (1 - cosW0) / 2
+            val b1 = 1 - cosW0
+            val b2 = (1 - cosW0) / 2
+            val a0 = 1 + alpha
+            val a1 = -2 * cosW0
+            val a2 = 1 - alpha
+            return normalise(b0, b1, b2, a0, a1, a2)
+        }
+
+        fun highPass(frequency: Float, q: Float, sampleRate: Int): FloatArray {
+            val w0 = 2.0 * Math.PI * frequency / sampleRate
+            val cosW0 = cos(w0)
+            val alpha = sin(w0) / (2.0 * q)
+            val b0 = (1 + cosW0) / 2
+            val b1 = -(1 + cosW0)
+            val b2 = (1 + cosW0) / 2
+            val a0 = 1 + alpha
+            val a1 = -2 * cosW0
+            val a2 = 1 - alpha
+            return normalise(b0, b1, b2, a0, a1, a2)
+        }
 
         // Robert Bristow-Johnson's audio EQ cookbook, normalised by a0.
         fun lowShelf(frequency: Float, gainDb: Float, sampleRate: Int): FloatArray {

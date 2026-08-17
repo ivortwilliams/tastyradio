@@ -94,7 +94,11 @@ fun SearchScreen(
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             label = { Text("Search stations") },
-            placeholder = { Text("religion, gregorian, techno, philosophy…") },
+            // Short, and pinned to one line: a wrapping placeholder makes the field two rows tall
+            // before anything has even been typed. The longer pitch lives in the empty state below.
+            placeholder = {
+                Text("religion, chant, techno…", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
             singleLine = true,
             trailingIcon = {
                 if (query.isNotEmpty()) {

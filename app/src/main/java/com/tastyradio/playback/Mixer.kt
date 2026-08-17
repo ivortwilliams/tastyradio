@@ -67,9 +67,17 @@ class Mixer(private val context: Context) {
      * unsaved station has `id = 0`. Keying on the id would make all auditioned stations collide
      * with each other.
      */
-    /** Three bands, each −12…+12 dB, where 0 is flat. */
-    data class Tone(val low: Float = 0f, val mid: Float = 0f, val high: Float = 0f) {
-        val isFlat: Boolean get() = low == 0f && mid == 0f && high == 0f
+    /**
+     * Per-channel tone. The three bands are −12…+12 dB shelves for balance; [filter] is the DJ
+     * sweep, −1 (low-pass closed) through 0 (bypassed) to +1 (high-pass closed).
+     */
+    data class Tone(
+        val low: Float = 0f,
+        val mid: Float = 0f,
+        val high: Float = 0f,
+        val filter: Float = 0f,
+    ) {
+        val isFlat: Boolean get() = low == 0f && mid == 0f && high == 0f && filter == 0f
     }
 
     data class Channel(
@@ -250,7 +258,10 @@ class Mixer(private val context: Context) {
      */
     fun setTone(key: String, tone: Tone) {
         updateChannel(key) { it.copy(tone = tone) }
-        equalisers[key]?.setGains(tone.low, tone.mid, tone.high)
+        equalisers[key]?.apply {
+            setGains(tone.low, tone.mid, tone.high)
+            setFilter(tone.filter)
+        }
     }
 
 
