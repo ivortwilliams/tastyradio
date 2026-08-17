@@ -88,8 +88,16 @@ class ChannelFilters : BaseAudioProcessor() {
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+            android.util.Log.w(
+                "ChannelFilters",
+                "not PCM16 (encoding=${inputAudioFormat.encoding}) — bypassed",
+            )
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
+        android.util.Log.i(
+            "ChannelFilters",
+            "configured: ${inputAudioFormat.sampleRate} Hz, ${inputAudioFormat.channelCount} ch",
+        )
         channelCount = inputAudioFormat.channelCount
         sampleRate = inputAudioFormat.sampleRate
 
@@ -196,6 +204,12 @@ class ChannelFilters : BaseAudioProcessor() {
         lowGain = bandGain(lowPosition)
         midGain = bandGain(midPosition)
         highGain = bandGain(highPosition)
+        android.util.Log.i(
+            "ChannelFilters",
+            "gains low=%.3f mid=%.3f high=%.3f rev=%.2f dly=%.2f".format(
+                lowGain, midGain, highGain, reverbAmount, delayAmount,
+            ),
+        )
 
         val wasDelayActive = delayActive
         val wasReverbActive = reverbActive
