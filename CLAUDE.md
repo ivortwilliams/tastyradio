@@ -194,7 +194,31 @@ brief:
 - Platform: Windows 11. Shell is **PowerShell** primarily; a Bash tool is also available —
   each takes its own syntax.
 
-### Shipping an APK to someone else (2026-08-18)
+### Distribution (set up 2026-08-18)
+The app lives at **https://github.com/ivortwilliams/tastyradio** (public, personal account
+`ivortwilliams` — *not* the work one). Three things hang off that:
+
+- **The download link to give people**:
+  `https://github.com/ivortwilliams/tastyradio/releases/latest/download/TastyRadio.apk`
+- **The install page for non-technical friends**: https://ivortwilliams.github.io/tastyradio/
+  (GitHub Pages, served from `docs/` on `main`).
+- **The app updates itself.** [`Updater`](app/src/main/java/com/tastyradio/update/Updater.kt) reads
+  `version.json` from the *latest* release on every launch and offers the new build when
+  `versionCode` is higher; it downloads the APK and hands it to the system installer through a
+  `FileProvider`. **The asset names must never change** — `TastyRadio.apk` and `version.json` — or
+  the `/releases/latest/download/…` URLs baked into old builds stop resolving. *Verified end to end:
+  a 0.2 install offered 0.3, downloaded it, installed over itself and kept its data.*
+
+To ship an update: bump `versionCode` **and** `versionName` in `app/build.gradle.kts`, then
+`.\scriptselease.ps1 -Notes "what changed"`. Forgetting `versionCode` means nobody's phone
+notices. No CI — the signing key never left this machine, and a one-command script was cheaper than
+a pipeline with a secret in it.
+
+DigitalOcean is available on the same account (`ivortawilliams@gmail.com`, token in
+`DIGITALOCEAN_ACCESS_TOKEN`) but is deliberately unused: GitHub Releases costs nothing, needs no
+server, and the CDN is better than a droplet.
+
+### Building the APK by hand
 `.\gradlew.bat assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (~38 MB,
 universal — every ABI, because a friend's phone is not a known quantity). It is signed with
 `tastyradio-release.jks`, whose passwords live in `keystore.properties`; **both are gitignored and
