@@ -44,7 +44,12 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
         // an environment without an IPv6 route (the emulator, plenty of real networks) otherwise
         // fails on the AAAA address.
         System.setProperty("java.net.preferIPv6Addresses", "false")
-        appScope.launch { repository.seedIfEmpty() }
+        // Stations first, then the mixes that point at them — the presets resolve their channels
+        // by stream URL against rows the station seeder has to have inserted already.
+        appScope.launch {
+            repository.seedIfEmpty()
+            mixRepository.seedIfEmpty { url -> repository.find(url) }
+        }
         // Never auto-download the corpus: it's tens of megabytes and the user might be on mobile
         // data. This only restores what's already on disk so the UI can say so honestly.
         search.restoreState(appScope)

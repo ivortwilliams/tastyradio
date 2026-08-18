@@ -1,8 +1,16 @@
+import java.util.Properties
+
 // AGP 9 has built-in Kotlin support: applying org.jetbrains.kotlin.android alongside it is an error.
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+}
+
+// Signing details for the sideloadable release APK, kept out of git (see keystore.properties.example).
+// Without them the release build is simply unsigned — a debug build still works for development.
+val signing = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -18,13 +26,26 @@ android {
         // 29, not 24: AudioPlaybackCapture (the recording feature) does not exist below API 29.
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
+    }
+
+    signingConfigs {
+        if (signing.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(signing.getProperty("storeFile"))
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // The same key has to sign every build, or an update won't install over the last one.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

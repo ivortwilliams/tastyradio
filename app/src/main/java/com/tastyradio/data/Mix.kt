@@ -53,6 +53,9 @@ interface MixDao {
     @Query("SELECT * FROM mixes ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<MixWithChannels>>
 
+    @Query("SELECT COUNT(*) FROM mixes")
+    suspend fun count(): Int
+
     @Query("SELECT * FROM mixes WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): Mix?
 

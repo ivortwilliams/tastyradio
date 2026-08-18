@@ -63,6 +63,15 @@ Working today:
   hand-checked concept map, always shown as removable chips. **▶ auditions a result straight into
   the running mix** without adding it to the collection.
 
+- **Three mixes and ten stations out of the box** (2026-08-18). A fresh install already holds the
+  owner's own soundscapes — *Ritual Gregorian* (RadCap ritual ambient under Radio Art's plainsong,
+  65% reverb on the chants), *The ULTIMATE Art Bell* (RadCap + Sex Sound Radio + Coast to Coast
+  archives, 45% reverb on Art Bell) and *Tasty Radio* on its own — so the point of the app is one
+  tap from opening it. Seeds live in [`SeedStations`](app/src/main/java/com/tastyradio/data/SeedStations.kt)
+  and [`SeedMixes`](app/src/main/java/com/tastyradio/data/SeedMixes.kt); presets resolve their
+  channels by **stream URL**, not row id, and only seed when the mixes table is empty. *Verified on
+  a clean install: three `AudioTrack`s from our uid all `state:started`, the reverbed channel's EQ
+  lit.*
 - **Edit and remove stations**: long-press a row to change name, artwork (device photo picker) or
   stream URL; swipe left to remove, with confirmation.
 - **Settings that matter**: large buffer (~60s ahead, on by default), automatic index refresh
@@ -185,6 +194,18 @@ brief:
 - Platform: Windows 11. Shell is **PowerShell** primarily; a Bash tool is also available —
   each takes its own syntax.
 
+### Shipping an APK to someone else (2026-08-18)
+`.\gradlew.bat assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (~38 MB,
+universal — every ABI, because a friend's phone is not a known quantity). It is signed with
+`tastyradio-release.jks`, whose passwords live in `keystore.properties`; **both are gitignored and
+both are irreplaceable** — a build signed with a different key won't install over one already on a
+phone, it has to be uninstalled first. `keystore.properties.example` documents the shape. Bump
+`versionCode` for each build you hand out.
+
+Sideloading: the recipient opens the link in Chrome, downloads, taps the file, and allows
+"install unknown apps" for whichever app is doing the opening. Messenger and WhatsApp both refuse
+`.apk` attachments, so it has to be a link.
+
 ### Testing targets (decided 2026-08-17)
 **Both**: an emulator AVD for fast UI iteration, and the owner's **physical phone** (the one
 currently running Transistor) for anything involving audio, mixing, network, notifications,
@@ -256,6 +277,11 @@ app/src/main/java/com/tastyradio/
 - **Compose's `Icons` are in a separate artifact** (`material-icons-core`), and `Stop`, `VolumeOff`
   and `Record` aren't in it anyway. `ui/Glyphs.kt` draws them on a `Canvas` instead — no dependency,
   and a filled square for *stop* is the honest shape for live radio.
+- **Coil's `android.resource://` support is numeric-id only** — verified by disassembling
+  `ResourceUriFetcher` in Coil 3.5.0: it takes the last path segment and `toIntOrNull`s it, so the
+  `.../drawable/name` form silently falls back to the monogram. Bundled artwork goes in `assets/`
+  and is referenced as `file:///android_asset/…`, which is stable across upgrades in a way a baked-in
+  resource id is not. That's why Ophelia exists twice in the APK.
 - **Station favicons are often transparent PNGs drawn for a light page.** They need an opaque light
   backdrop, and the monogram must be a *fallback* rather than sitting behind the image — otherwise
   it bleeds through and every logo looks dirty.

@@ -87,6 +87,9 @@ class StationRepository(private val dao: StationDao) {
         val favicon: String?,
     )
 
+    /** The stream URL is a station's stable identity before it has a row id. */
+    suspend fun find(streamUrl: String): Station? = dao.findByUrl(streamUrl.trim())
+
     suspend fun update(station: Station) = dao.update(
         station.copy(name = station.name.trim(), streamUrl = station.streamUrl.trim())
     )
@@ -118,9 +121,9 @@ class StationRepository(private val dao: StationDao) {
         }
 
     /**
-     * First run gets the owner's own station list, so the app is useful before anything is typed
-     * into it. Stream URLs came from radio-browser.info; *Tasty Radio* itself isn't listed there,
-     * so that one has to be added by URL or M3U import.
+     * First run gets the shipped station list, so the app is useful before anything is typed into
+     * it — and so the shipped mixes have stations to point at. Stream URLs came from
+     * radio-browser.info, except *Tasty Radio*, which isn't listed there and is hard-coded.
      */
     suspend fun seedIfEmpty() {
         if (dao.count() > 0) return
