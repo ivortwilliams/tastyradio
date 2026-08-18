@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tastyradio.data.Settings
 import com.tastyradio.playback.Mixer
 import com.tastyradio.search.SearchRepository
+import com.tastyradio.update.Updater
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +41,7 @@ import java.util.Locale
 fun SettingsScreen(
     search: SearchRepository,
     settings: Settings.Values,
+    updater: Updater,
     onLargeBuffer: (Boolean) -> Unit,
     onRefresh: (Settings.RefreshFrequency) -> Unit,
     onSync: () -> Unit,
@@ -48,6 +50,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val syncState by search.syncState.collectAsStateWithLifecycle()
+    val updateState by updater.state.collectAsStateWithLifecycle()
     var stats by remember { mutableStateOf<SearchRepository.Stats?>(null) }
 
     LaunchedEffect(syncState) { stats = search.stats() }
@@ -222,7 +225,37 @@ fun SettingsScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("Tasty Radio 0.1", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Tasty Radio ${updater.installedVersionName}",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                // This app arrives as a file from a friend, not from a store, so the only thing
+                // that tells you it's out of date is this line.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = when (val update = updateState) {
+                            is Updater.State.Checking -> "Checking for updates…"
+                            is Updater.State.UpToDate -> "Up to date"
+                            is Updater.State.Available -> "Version ${update.release.versionName} is available"
+                            is Updater.State.Downloading -> "Downloading… ${update.percent}%"
+                            is Updater.State.Ready -> "Ready to install"
+                            is Updater.State.Failed -> update.reason
+                            Updater.State.Idle -> "Updates come straight to the app"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (updateState is Updater.State.Available) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        enabled = updateState !is Updater.State.Checking &&
+                            updateState !is Updater.State.Downloading,
+                        onClick = { updater.check(force = true) },
+                    ) { Text("Check now") }
+                }
                 Text(
                     text = "Up to ${Mixer.MAX_CHANNELS} stations at once. Faders are per station; " +
                         "M mutes a channel; ✕ drops it. The red dot records the mix to a file in " +

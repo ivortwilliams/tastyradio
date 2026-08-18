@@ -14,6 +14,7 @@ import com.tastyradio.search.SyncWorker
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
+import com.tastyradio.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +38,7 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
     val recorder by lazy { Recorder(this) }
     val search by lazy { SearchRepository(this) }
     val settings by lazy { Settings(this) }
+    val updater by lazy { Updater(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +52,10 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
             repository.seedIfEmpty()
             mixRepository.seedIfEmpty { url -> repository.find(url) }
         }
+        // Ask once per launch whether there's a newer build. Costs one small request, and it's the
+        // only reason a phone that got this app from a link ever hears about a fix.
+        updater.check()
+
         // Never auto-download the corpus: it's tens of megabytes and the user might be on mobile
         // data. This only restores what's already on disk so the UI can say so honestly.
         search.restoreState(appScope)

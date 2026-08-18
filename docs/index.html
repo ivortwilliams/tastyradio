@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasty Radio</title>
+<meta name="description" content="A radio app that plays several stations at once, and records the mix.">
+<meta property="og:title" content="Tasty Radio">
+<meta property="og:description" content="A radio app that plays several stations at once, and records the mix. For Android.">
+<style>
+  :root {
+    --bg: #12121a;
+    --card: #1c1c27;
+    --ink: #f2f2f7;
+    --muted: #a0a0b4;
+    --accent: #8ba2ff;
+    --line: #2b2b3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 34rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  .logo {
+    width: 96px; height: 96px; border-radius: 50%;
+    display: block; margin: 0 auto 1.25rem;
+    object-fit: cover;
+    box-shadow: 0 0 0 3px var(--line);
+  }
+  h1 { font-size: 2rem; text-align: center; margin: 0 0 .35rem; letter-spacing: -.02em; }
+  .tag { text-align: center; color: var(--muted); margin: 0 0 2rem; }
+  .download {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--accent); color: #10101a; font-weight: 700; font-size: 1.1rem;
+    padding: 1.1rem 1rem; border-radius: 14px; margin-bottom: .6rem;
+  }
+  .download:active { transform: translateY(1px); }
+  .under { text-align: center; color: var(--muted); font-size: .85rem; margin: 0 0 2.5rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+  ol { padding-left: 1.25rem; margin: 0; }
+  ol li { margin-bottom: .85rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: .75rem;
+  }
+  .card h3 { margin: 0 0 .3rem; font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .9rem; }
+  footer { margin-top: 3rem; text-align: center; color: var(--muted); font-size: .8rem; }
+  a { color: var(--accent); }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f6fa; --card: #fff; --ink: #16161d; --muted: #5a5a70; --accent: #3d5afe; --line: #e3e3ee; }
+    .download { color: #fff; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="ophelia.png" alt="">
+  <h1>Tasty Radio</h1>
+  <p class="tag">A radio app that plays several stations at once — and records the mix.</p>
+
+  <a class="download" href="https://github.com/ivortwilliams/tastyradio/releases/latest/download/TastyRadio.apk">
+    Download for Android
+  </a>
+  <p class="under">Android 10 or newer · about 38 MB · free, no account</p>
+
+  <h2>Installing it</h2>
+  <ol>
+    <li>Tap the button above. Your browser will warn you about downloading a file — that's normal for
+      apps that don't come from the Play Store. Choose <b>Download anyway</b>.</li>
+    <li>Open the downloaded file. Android will ask whether to <b>allow this browser to install
+      apps</b>. Say yes, then tap <b>Install</b>.</li>
+    <li>Open Tasty Radio. Three mixes are already in it.</li>
+  </ol>
+  <p class="under" style="margin-top:1.25rem">
+    You only do this once. The app tells you when there's a new version and updates itself.
+  </p>
+
+  <h2>What it does</h2>
+  <div class="card">
+    <h3>Plays several stations at once</h3>
+    <p>Up to four, each with its own fader, mute and tone. Gregorian chant under dark ambient is a
+      different thing than either one on its own.</p>
+  </div>
+  <div class="card">
+    <h3>Records the mix</h3>
+    <p>One button. What you hear is what lands in the file, ready to send to someone.</p>
+  </div>
+  <div class="card">
+    <h3>Finds stations offline</h3>
+    <p>62,000 of them, indexed on the phone. Search "religion" and Vatican Radio comes up.</p>
+  </div>
+
+  <footer>
+    Open source — <a href="https://github.com/ivortwilliams/tastyradio">github.com/ivortwilliams/tastyradio</a><br>
+    Icon: <i>Ophelia</i>, John Everett Millais, 1852. Public domain.
+  </footer>
+</main>
+</body>
+</html>

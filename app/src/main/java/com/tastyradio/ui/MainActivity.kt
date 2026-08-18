@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
                     recorder = app.recorder,
                     search = app.search,
                     settings = app.settings,
+                    updater = app.updater,
                 )
             }
         }

@@ -15,6 +15,15 @@ than just the station's name. Type `religion` and you get Vatican Radio.
 No accounts, no ads, no feed. Inspired by [Transistor](https://github.com/y20k/transistor),
 which is the reference for how the rest of the app should feel.
 
+## Install it
+
+**[⬇ Download Tasty Radio for Android](https://github.com/ivortwilliams/tastyradio/releases/latest/download/TastyRadio.apk)**
+— or open **[the install page](https://ivortwilliams.github.io/tastyradio/)** on the phone itself,
+which explains the two taps Android asks for.
+
+Android 10 or newer. It is not on the Play Store and doesn't need to be: the app checks for its own
+updates and offers them to you, so this is the only download you have to do by hand.
+
 ## Status
 
 **It runs, it mixes, it records, and it searches.** Per-station faders over several simultaneous
@@ -23,7 +32,8 @@ and an offline search over 62,000 stations that matches on tags rather than just
 "religion" finds Radio Vaticana, and ▶ auditions a result straight into whatever is already
 playing.
 
-Not built yet: theme and buffer settings, M3U export, backup/restore.
+A fresh install already holds three mixes — *Ritual Gregorian*, *The ULTIMATE Art Bell* and
+*Tasty Radio* — so the point of the app is one tap from opening it.
 
 ## Docs
 
@@ -40,6 +50,17 @@ Not built yet: theme and buffer settings, M3U export, backup/restore.
 ```bash
 ./gradlew.bat assembleDebug
 ```
+
+To publish an update everyone's phone will be offered: bump `versionCode` and `versionName` in
+[`app/build.gradle.kts`](app/build.gradle.kts), then
+
+```powershell
+.\scriptselease.ps1 -Notes "What changed, in a sentence"
+```
+
+which builds the signed APK, writes the `version.json` the in-app updater reads, and publishes both
+as a GitHub release. Signing needs `keystore.properties` and the keystore it points at — neither is
+in this repo, and a build signed with a different key cannot update one already on a phone.
 
 Needs the Android SDK and a `local.properties` pointing at it (`sdk.dir=…`). Gradle is pinned at
 Studio's bundled JBR 21 in `gradle.properties`, because the `java` on this machine's PATH is too old

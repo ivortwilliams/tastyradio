@@ -36,6 +36,7 @@ import com.tastyradio.data.StationRepository
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
+import com.tastyradio.update.Updater
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -75,6 +76,7 @@ fun RootScreen(
     recorder: Recorder,
     search: SearchRepository,
     settings: Settings,
+    updater: Updater,
 ) {
     val settingsValues by settings.values.collectAsStateWithLifecycle(initialValue = Settings.Values())
     var tab by remember { mutableStateOf(Tab.Mixes) }
@@ -277,6 +279,7 @@ fun RootScreen(
             Tab.Settings -> SettingsScreen(
                 search = search,
                 settings = settingsValues,
+                updater = updater,
                 modifier = Modifier.padding(padding),
                 onLargeBuffer = { enabled ->
                     scope.launch {
@@ -384,4 +387,8 @@ fun RootScreen(
             onResult = notify,
         )
     }
+
+    // Last, so it sits above everything else: an update offer is the one thing worth interrupting
+    // for, and it only ever appears when there is genuinely a newer build.
+    UpdatePrompt(updater)
 }

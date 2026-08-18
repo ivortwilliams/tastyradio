@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the folder the updater downloads into. Nothing else in the app is shareable this way. -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>
