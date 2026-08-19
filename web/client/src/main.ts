@@ -41,8 +41,10 @@ async function start(): Promise<void> {
 
   const mixer = new Mixer();
   const page = el('main', { class: 'page-host', id: 'page' });
-  let tab: Tab = (location.hash.slice(1) as Tab) || 'stations';
-  if (!TABS.some((candidate) => candidate.id === tab)) tab = 'stations';
+  // Mixes is the front page. The point of this app is two unrelated stations becoming a third
+  // thing, and that is what a mix is — a list of stations is the ingredients, not the dish.
+  let tab: Tab = (location.hash.slice(1) as Tab) || 'mixes';
+  if (!TABS.some((candidate) => candidate.id === tab)) tab = 'mixes';
 
   const desk = new Desk(
     mixer,
@@ -153,6 +155,90 @@ async function start(): Promise<void> {
 
   void showIndexStatus(indexNote);
   rerender();
+  cueTheHouseMix(mixer, rerender);
+}
+
+/** What plays when you land. The soundscape the app was built to demonstrate. */
+const HOUSE_MIX = 'Ritual Gregorian';
+
+/**
+ * Puts the house mix on the desk the moment somebody arrives, and starts it if the browser lets us.
+ *
+ * **It usually won't**, and that is not a bug to fix but a rule to work with: browsers refuse to
+ * play audio until the visitor has interacted with the page, which is the correct default for the
+ * web and the reason nobody's laptop screams at them when they open a link. Chrome relaxes it for
+ * sites you return to often, so this genuinely does autoplay for regulars.
+ *
+ * Either way the mix is *loaded* — faders, reverb and all — so the fallback is one tap on a curtain
+ * rather than a hunt for the play button.
+ */
+function cueTheHouseMix(mixer: Mixer, rerender: () => void): void {
+  const mix = store.mixes().find((candidate) => candidate.name === HOUSE_MIX) ?? store.mixes()[0];
+  if (!mix) return;
+
+  const presets = mix.channels
+    .map((channel) => ({ channel, station: store.stationById(channel.stationId) }))
+    .filter((entry) => entry.station !== undefined)
+    .map((entry) => ({
+      station: entry.station!,
+      fader: entry.channel.fader,
+      muted: entry.channel.muted,
+      tone: store.toneOrFlat(entry.channel.tone),
+    }));
+  if (presets.length === 0) return;
+
+  mixer.load(presets);
+  rerender();
+
+  // Watch for the refusal rather than guessing how long it takes to arrive — a slow machine or a
+  // slow first byte would make any fixed delay wrong, in one direction or the other.
+  mixer.subscribe(() => {
+    if (mixer.blockedByAutoplay) showCurtain(mixer, mix.name);
+  });
+  // Belt and braces: some browsers simply leave the context suspended without rejecting play().
+  window.setTimeout(() => {
+    if (mixer.ctx.state === 'suspended') showCurtain(mixer, mix.name);
+  }, 600);
+}
+
+/**
+ * The one tap that starts the sound, for browsers that won't do it unasked.
+ *
+ * Any gesture anywhere will do — the curtain is a large obvious target rather than a small button,
+ * because the thing being asked for is "touch the page", not "find the control".
+ */
+function showCurtain(mixer: Mixer, mixName: string): void {
+  if (document.querySelector('.curtain')) return;
+
+  const curtain = el(
+    'button',
+    { class: 'curtain', type: 'button', 'aria-label': `Start ${mixName}` },
+    el('img', { class: 'curtain-logo', src: '/ophelia.png', alt: '' }),
+    el('span', { class: 'curtain-name', text: mixName }),
+    el('span', { class: 'curtain-hint', text: 'cued up — tap anywhere to play' }),
+  );
+
+  const start = () => {
+    curtain.remove();
+    void mixer.unblock();
+  };
+  curtain.addEventListener('click', start);
+  // A keyboard visitor has already interacted by the time they tab to it.
+  curtain.addEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') start();
+  });
+
+  // If audio starts on its own after all — a returning visitor, or a slow resume — get out of
+  // the way rather than making them dismiss a curtain over something already playing.
+  const unsubscribe = mixer.subscribe(() => {
+    if (!mixer.blockedByAutoplay && mixer.ctx.state === 'running') {
+      curtain.remove();
+      unsubscribe();
+    }
+  });
+
+  document.body.appendChild(curtain);
+  curtain.focus();
 }
 
 /**

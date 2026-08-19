@@ -75,6 +75,12 @@ export class Mixer {
   private readonly listeners = new Set<() => void>();
   readonly sid: string;
 
+  /**
+   * True when the browser refused to start audio because nobody had interacted with the page yet.
+   * The site cues its house mix up on landing, so this is the normal state of a first visit.
+   */
+  blockedByAutoplay = false;
+
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'playback' });
     this.master = this.ctx.createGain();
@@ -183,6 +189,15 @@ export class Mixer {
     entry.hls?.destroy();
     entry.hls = null;
 
+    // Reset the element before pointing it somewhere new. Assigning `src` over a source that is
+    // still tearing down makes the element report "no supported source was found" for a stream that
+    // is perfectly fine — and the tell is that pressing retry immediately afterwards works.
+    if (element.getAttribute('src') !== null) {
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+    }
+
     // Most radio is a plain audio stream. HLS is a real but small minority of the corpus, and
     // hls.js is most of this app's JavaScript, so it is fetched only when something actually needs
     // it rather than by everybody on every visit.
@@ -229,10 +244,32 @@ export class Mixer {
   private beginPlayback(entry: Live): void {
     void entry.element.play().catch((error: DOMException) => {
       // A rejected play() before any user gesture is the browser's autoplay policy, not a dead
-      // station — the next click resumes it. Anything else is a real failure.
-      if (error.name === 'NotAllowedError') return;
+      // station. It is emphatically *not* a failure — the watchdog is stood down and the UI offers
+      // a tap, because calling this channel broken would be a lie about a stream we never tried.
+      if (error.name === 'NotAllowedError') {
+        this.clearWatchdog(entry);
+        this.blockedByAutoplay = true;
+        this.changed();
+        return;
+      }
       this.fail(entry, error.message);
     });
+  }
+
+  /**
+   * Starts everything that the autoplay policy refused. **Must be called from a real user gesture**
+   * — that is the entire point of the policy, and a resume() outside one is ignored.
+   */
+  async unblock(): Promise<void> {
+    await this.ctx.resume().catch(() => undefined);
+    this.blockedByAutoplay = false;
+    for (const entry of this.live.values()) {
+      // A full restart rather than another play(): a stream can drop while it sits waiting for
+      // somebody to tap, and resuming a dead element hands back a channel that is already broken.
+      this.update(entry.channel.key, (channel) => ({ ...channel, state: 'connecting', error: null }));
+      this.start(entry);
+    }
+    this.changed();
   }
 
   private attachElementEvents(entry: Live): void {
@@ -264,6 +301,9 @@ export class Mixer {
    */
   private armWatchdog(entry: Live): void {
     this.clearWatchdog(entry);
+    // Nothing is loading while the autoplay policy holds us; counting down would only produce a
+    // false failure on a stream that was never given a chance.
+    if (this.blockedByAutoplay) return;
     entry.watchdog = window.setTimeout(() => {
       if (entry.channel.state === 'connecting') this.fail(entry, 'no audio after 20s');
     }, STALL_TIMEOUT_MS);
