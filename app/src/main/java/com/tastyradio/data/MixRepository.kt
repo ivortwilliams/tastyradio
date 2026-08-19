@@ -3,7 +3,11 @@ package com.tastyradio.data
 import com.tastyradio.playback.Mixer
 import kotlinx.coroutines.flow.Flow
 
-class MixRepository(private val dao: MixDao) {
+class MixRepository(
+    private val dao: MixDao,
+    /** Saving a mix can need to *create* stations, so this layer owns the collection too. */
+    private val stations: StationRepository,
+) {
 
     val mixes: Flow<List<MixWithChannels>> = dao.observeAll()
 
@@ -11,16 +15,30 @@ class MixRepository(private val dao: MixDao) {
      * Saves the mix exactly as it currently sounds — faders, mutes and tone.
      *
      * Saving over an existing name replaces it, because "save" on a name you already used means
-     * update, not duplicate. Channels that aren't saved stations (an audition from search) are
-     * skipped: there's no id to point at, and silently saving a station you never added would be a
-     * surprise later.
+     * update, not duplicate.
+     *
+     * **A channel auditioned from search is collected on the way in.** A saved mix is a list of
+     * station rows, so a channel with no row cannot be in one; this used to drop those channels
+     * silently, and the mix came back a station short next session. Asking to save the mix *is*
+     * asking to keep what is in it, so anything not yet in the collection gets added — matched by
+     * stream URL, so a station you already have is never duplicated.
      */
-    /** [replaced] is true when an existing mix of that name was overwritten rather than created. */
-    data class SaveResult(val stations: Int, val replaced: Boolean)
+    /**
+     * [replaced] is true when an existing mix of that name was overwritten rather than created.
+     * [added] counts stations that joined the collection to make this mix saveable.
+     */
+    data class SaveResult(val stations: Int, val replaced: Boolean, val added: Int = 0)
 
     suspend fun save(name: String, channels: List<Mixer.Channel>): SaveResult {
         val cleanName = name.trim().ifEmpty { return SaveResult(0, false) }
-        val saveable = channels.filter { it.station.id != 0L }
+        if (channels.isEmpty()) return SaveResult(0, false)
+
+        var added = 0
+        val saveable = channels.mapNotNull { channel ->
+            val station = collect(channel.station) ?: return@mapNotNull null
+            if (channel.station.id == 0L && station.id != 0L) added++
+            station.id to channel
+        }
         if (saveable.isEmpty()) return SaveResult(0, false)
 
         val existing = dao.findByName(cleanName)
@@ -32,10 +50,10 @@ class MixRepository(private val dao: MixDao) {
         }
 
         dao.insertChannels(
-            saveable.map { channel ->
+            saveable.map { (stationId, channel) ->
                 MixChannel(
                     mixId = mixId,
-                    stationId = channel.station.id,
+                    stationId = stationId,
                     fader = channel.fader,
                     muted = channel.muted,
                     toneLow = channel.tone.low,
@@ -47,7 +65,32 @@ class MixRepository(private val dao: MixDao) {
                 )
             }
         )
-        return SaveResult(stations = saveable.size, replaced = existing != null)
+        return SaveResult(stations = saveable.size, replaced = existing != null, added = added)
+    }
+
+    /**
+     * The station row this channel should point at.
+     *
+     * A channel that came from the collection already knows. One auditioned from search carries
+     * `id = 0` and everything the directory said about it, so it is looked up by stream URL first —
+     * which also covers the case where it was auditioned *and* added with ＋, leaving the running
+     * channel holding a stale copy with no id.
+     */
+    private suspend fun collect(station: Station): Station? {
+        if (station.id != 0L) return station
+        stations.find(station.streamUrl)?.let { return it }
+        return stations.add(
+            name = station.name,
+            streamUrl = station.streamUrl,
+            imageUrl = station.imageUrl,
+            sourceUuid = station.sourceUuid,
+            source = station.source,
+            tags = station.tags,
+            codec = station.codec,
+            bitrate = station.bitrate,
+            country = station.country,
+            language = station.language,
+        )
     }
 
     /**

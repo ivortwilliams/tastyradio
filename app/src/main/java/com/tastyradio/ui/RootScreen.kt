@@ -360,16 +360,25 @@ fun RootScreen(
                             val result = mixRepository.save(name, channels)
                             liveMixName = name.trim()
                             showSaveMix = false
+                            // Saving can collect a station auditioned from search, and a station
+                            // appearing in your list without being told would be a small mystery.
+                            val counted = "${result.stations} station" +
+                                if (result.stations == 1) "" else "s"
+                            val collected = when (result.added) {
+                                0 -> ""
+                                1 -> " · 1 added to your stations"
+                                else -> " · ${result.added} added to your stations"
+                            }
                             notify(
                                 when {
                                     result.stations == 0 ->
-                                        "Nothing to save — add a station from your collection first."
+                                        "Nothing to save — the mixer is empty."
                                     // Says which of the two things happened, so replacing an
                                     // existing mix never looks like it made a second one.
                                     result.replaced ->
-                                        "Updated “${name.trim()}” (${result.stations} stations)"
+                                        "Updated “${name.trim()}” ($counted)$collected"
                                     else ->
-                                        "Saved “${name.trim()}” (${result.stations} stations)"
+                                        "Saved “${name.trim()}” ($counted)$collected"
                                 }
                             )
                         }

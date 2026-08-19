@@ -33,7 +33,7 @@ class TastyRadioApp : Application(), SingletonImageLoader.Factory {
 
     val database by lazy { TastyDb.build(this) }
     val repository by lazy { StationRepository(database.stations()) }
-    val mixRepository by lazy { MixRepository(database.mixes()) }
+    val mixRepository by lazy { MixRepository(database.mixes(), repository) }
     val mixer by lazy { Mixer(this) }
     val recorder by lazy { Recorder(this) }
     val search by lazy { SearchRepository(this) }

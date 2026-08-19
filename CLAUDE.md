@@ -210,7 +210,8 @@ The app lives at **https://github.com/ivortwilliams/tastyradio** (public, person
   a 0.2 install offered 0.3, downloaded it, installed over itself and kept its data.*
 
 To ship an update: bump `versionCode` **and** `versionName` in `app/build.gradle.kts`, then
-`.\scriptselease.ps1 -Notes "what changed"`. Forgetting `versionCode` means nobody's phone
+`.\scripts
+elease.ps1 -Notes "what changed"`. Forgetting `versionCode` means nobody's phone
 notices. No CI — the signing key never left this machine, and a one-command script was cheaper than
 a pipeline with a secret in it.
 
@@ -309,6 +310,11 @@ app/src/main/java/com/tastyradio/
 - **Station favicons are often transparent PNGs drawn for a light page.** They need an opaque light
   backdrop, and the monogram must be a *fallback* rather than sitting behind the image — otherwise
   it bleeds through and every logo looks dirty.
+- **Saving a mix collects what's in it.** A channel auditioned from search carries `id = 0`, and a
+  saved mix is a list of station *rows* — so `MixRepository.save` used to filter those channels out
+  and the mix came back a station short next session (reported from a real phone, fixed 2026-08-19).
+  It now inserts anything not already in the collection, matched by stream URL, which also covers a
+  channel auditioned *and* then added with ＋, whose running copy still holds no id.
 - **Channel identity can't be the Room id.** Auditioning a search result plays a station that isn't
   in the collection (`id = 0`), so the `Mixer` keys channels on `Station.channelKey()` —
   `id:<row>` when saved, `url:<stream>` when not. Getting this wrong would make every auditioned
