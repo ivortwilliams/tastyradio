@@ -35,8 +35,16 @@ function shell(
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    if (onCommit) void onCommit(dialog);
-    else dialog.close();
+    if (!onCommit) {
+      dialog.close();
+      return;
+    }
+    void Promise.resolve(onCommit(dialog)).then(() => {
+      // A dialog that closed during its own commit is finished with. Relying on the `close` event
+      // alone leaves the node in the page when the handler navigates or re-renders in the same
+      // turn, which is invisible but untidy.
+      if (!dialog.open) dialog.remove();
+    });
   });
 
   if (options.dismissible === false) {
