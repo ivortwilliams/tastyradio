@@ -1,0 +1,44 @@
+# TLS with no configuration and no renewal to remember: Caddy gets a certificate from Let's Encrypt
+# on first boot and keeps it current. Point a different name at the droplet and change this one line.
+
+radio.truthseekersbyo.com {
+	encode zstd gzip
+
+	reverse_proxy app:8080 {
+		# The two settings that matter here, and both are about the same thing: this site's traffic
+		# is a live audio stream and a server-sent-events channel, neither of which ever ends.
+		#
+		# flush_interval -1 turns off response buffering, so audio reaches the browser as it arrives
+		# rather than in blocks, and a now-playing event isn't held back waiting for a full buffer.
+		flush_interval -1
+
+		# No read timeout, or every stream would be cut off mid-listen.
+		transport http {
+			response_header_timeout 30s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+
+	# Audio and search are not for search engines, and the proxy least of all.
+	handle /robots.txt {
+		respond "User-agent: *
+Disallow: /" 200
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		# The page loads media and images only from itself — everything external is relayed by the
+		# proxy — so this is tight without being fussy.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+	}
+}

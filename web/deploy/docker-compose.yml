@@ -1,0 +1,51 @@
+# What runs on the droplet. Two containers: the app, and Caddy in front of it for TLS.
+#
+# Copied to /opt/tastyradio on the server by the deploy workflow. The image is built by GitHub
+# Actions and pulled from GHCR — a 1 GB droplet should not be spending its afternoon compiling
+# TypeScript.
+
+services:
+  app:
+    image: ghcr.io/ivortwilliams/tastyradio-web:latest
+    restart: unless-stopped
+    environment:
+      # One shared password for everybody. Empty means the site is open, which also means the
+      # stream proxy is an open relay — see web/README.md.
+      ACCESS_CODE: ${ACCESS_CODE:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      INDEX_URL: ${INDEX_URL:-https://github.com/ivortwilliams/tastyradio/releases/download/station-index/station-index.db.gz}
+      MAX_CONCURRENT_STREAMS: ${MAX_CONCURRENT_STREAMS:-48}
+    volumes:
+      - index:/data
+    expose:
+      - '8080'
+    # A handful of friends on a 1 GB box. The cap stops a runaway from taking the host with it.
+    mem_limit: 700m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  index:
+  caddy_data:
+  caddy_config:

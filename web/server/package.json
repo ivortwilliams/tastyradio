@@ -1,0 +1,22 @@
+{
+  "name": "tastyradio-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The server half of Tasty Radio on the web: stream proxy, station index, search.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "tsc -p tsconfig.json --watch & node --watch dist/main.js",
+    "build-index": "node dist/indexer-cli.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

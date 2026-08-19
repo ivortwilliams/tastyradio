@@ -1,0 +1,70 @@
+# Builds the station index and publishes it as a release asset.
+#
+# `discovery.md` says that if derived data ever outgrows the device, the answer is "a GitHub
+# Actions cron publishing a static file to a Release — a build-time pipeline, not a runtime
+# service". This is that, and it is what keeps the web version's search identical to the phone's
+# without asking every browser to download 34 MB or every server to re-pull the whole corpus.
+name: Station index
+
+on:
+  schedule:
+    # Weekly, like the phone's refresh. Station data moves slowly and radio-browser is a volunteer
+    # project — pulling the whole corpus more often than this would be rude.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: station-index
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/server/package-lock.json
+
+      - name: Install
+        working-directory: web/server
+        run: npm ci
+
+      - name: Build
+        working-directory: web/server
+        run: npm run build
+
+      - name: Pull the corpus and index it
+        working-directory: web/server
+        # The CLI exits non-zero on a partial index, so a sync that quietly returned a fraction of
+        # the corpus fails the job instead of being published as if it were complete.
+        run: node dist/indexer-cli.js out/station-index.db
+
+      - name: Compress
+        working-directory: web/server
+        run: |
+          gzip -9 -c out/station-index.db > out/station-index.db.gz
+          ls -lh out/
+
+      - name: Publish
+        working-directory: web/server
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # A fixed tag with a moving asset, because the servers fetch a stable URL. The release is
+        # created once and updated forever after.
+        run: |
+          gh release view station-index --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create station-index \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Station index" \
+              --notes "The radio-browser corpus, cleaned and indexed into SQLite FTS5. Rebuilt weekly and downloaded by the web server on boot. Not a code release." \
+              --latest=false
+          gh release upload station-index out/station-index.db.gz \
+            --repo "$GITHUB_REPOSITORY" --clobber

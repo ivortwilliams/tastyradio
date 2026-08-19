@@ -8,7 +8,7 @@
 
         .\scripts\release.ps1 -Notes "Fixed the Gregorian stream"
 
-    It reads the version out of app/build.gradle.kts (bump versionCode there first, or nobody's
+    It reads the version out of android/app/build.gradle.kts (bump versionCode there first, or nobody's
     phone will notice the new build), builds, writes the version.json the in-app updater reads, and
     uploads both to a new release tagged with the version name.
 
@@ -26,12 +26,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-Set-Location $root
+Set-Location (Join-Path $root "android")
 
 $gradle = Get-Content "app/build.gradle.kts" -Raw
-if ($gradle -notmatch 'versionCode\s*=\s*(\d+)') { throw "No versionCode in app/build.gradle.kts" }
+if ($gradle -notmatch 'versionCode\s*=\s*(\d+)') { throw "No versionCode in android/app/build.gradle.kts" }
 $versionCode = [int]$Matches[1]
-if ($gradle -notmatch 'versionName\s*=\s*"([^"]+)"') { throw "No versionName in app/build.gradle.kts" }
+if ($gradle -notmatch 'versionName\s*=\s*"([^"]+)"') { throw "No versionName in android/app/build.gradle.kts" }
 $versionName = $Matches[1]
 $tag = "v$versionName"
 
@@ -42,7 +42,7 @@ if (& git status --porcelain) { Write-Warning "Working tree is dirty — releasi
 & .\gradlew.bat assembleRelease --console=plain
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
-$staging = Join-Path $root "build/release"
+$staging = Join-Path $root "android/build/release"
 New-Item -ItemType Directory -Force $staging | Out-Null
 $apk = Join-Path $staging "TastyRadio.apk"
 Copy-Item "app/build/outputs/apk/release/app-release.apk" $apk -Force

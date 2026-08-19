@@ -1,9 +1,7 @@
-# Gradle
+# ---- Android (android/) ----
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
-
-# Android
 local.properties
 *.apk
 *.aab
@@ -15,6 +13,7 @@ captures/
 .cxx/
 release/
 output.json
+.kotlin/
 
 # Keystores / signing — never commit these
 *.jks
@@ -22,22 +21,33 @@ output.json
 keystore.properties
 signing.properties
 
-# IDE
+# ---- Web (web/) ----
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+# The station index and anything else the server writes at runtime.
+web/server/data/
+# A built index is 34 MB of generated data; it is published as a release asset, not committed.
+web/server/out/
+# Vite builds the client straight into here. Generated, never edited, never committed —
+# note this is NOT web/client/public/, which holds real source assets like Ophelia.
+web/server/public/
+
+# ---- IDE ----
 .idea/
 *.iml
 *.ipr
 *.iws
 .navigation/
+.vscode/
 
-# Kotlin
-.kotlin/
-
-# OS
+# ---- OS ----
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Env / secrets
+# ---- Env / secrets ----
 .env
 .env.*
 !.env.example

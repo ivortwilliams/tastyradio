@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+server/public
+server/data
+server/out
+deploy
+*.md
