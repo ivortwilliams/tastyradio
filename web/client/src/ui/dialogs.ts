@@ -6,94 +6,132 @@ import { button, el, toast } from './dom.js';
 /** Modals, kept to the few places where the app genuinely has a question to ask. */
 
 /**
- * One dialog shell, and one route out of it.
+ * A dialog with exactly one way out.
  *
- * ⚠️ **A `method="dialog"` form closes the dialog on submit without running any of your code**, and
- * pressing Enter in a text field submits the form. So a dialog whose only handler is on the button's
- * `click` does nothing at all when you type a value and hit Enter — it just vanishes, which reads as
- * "the site is broken". That is exactly how the access-code dialog behaved on the day it shipped.
+ * Two things about `<dialog>` bit hard enough to be worth writing down, because both produce the
+ * same symptom — a control that visibly does nothing:
  *
- * Everything commits through [onCommit] instead: the form's submit event, which both Enter and the
- * primary button (`type="submit"`) go through. Cancel buttons close the dialog directly.
+ * 1. **A `method="dialog"` form closes the dialog on submit without running any of your code**, and
+ *    pressing Enter in a text field submits the form. A dialog whose only handler is on the button's
+ *    `click` therefore just vanishes when you type a value and hit Enter. That is exactly how the
+ *    access-code box behaved on the day it shipped: right password, blank page.
+ * 2. **The `close` event cannot be relied on to fire at all.** Measured in a Chromium-based browser:
+ *    zero `close` events, even for a plain `close()` on an element still in the document. Anything
+ *    that resolved a promise or cleaned up from that event hung forever.
+ *
+ * So nothing here is event-driven. Every route out — Enter, the primary button, Cancel, Escape —
+ * goes through [Dialog.dismiss], which is idempotent and does the tidying itself.
  */
-function shell(
-  title: string,
-  body: HTMLElement,
-  actions: HTMLElement[],
-  onCommit?: (dialog: HTMLDialogElement) => void | Promise<void>,
-  options: { dismissible?: boolean; className?: string } = {},
-): HTMLDialogElement {
+export interface Dialog {
+  node: HTMLDialogElement;
+  /** Close, remove from the page, and run the dismiss callback. Safe to call more than once. */
+  dismiss(): void;
+}
+
+interface ShellOptions {
+  title?: string;
+  body: HTMLElement;
+  /** Built with the handle, so a Cancel button can dismiss without reaching for the DOM. */
+  actions: (dialog: Dialog) => HTMLElement[];
+  onCommit?: (dialog: Dialog) => void | Promise<void>;
+  /** Runs once, however the dialog goes away — including after a commit. */
+  onDismiss?: () => void;
+  /** False for the gate, which has nothing behind it to go back to. */
+  dismissible?: boolean;
+  className?: string;
+}
+
+function shell(options: ShellOptions): Dialog {
+  const node = el('dialog', { class: `dialog ${options.className ?? ''}`.trim() }) as HTMLDialogElement;
+
+  let gone = false;
+  const handle: Dialog = {
+    node,
+    dismiss() {
+      if (gone) return;
+      gone = true;
+      if (node.open) node.close();
+      node.remove();
+      options.onDismiss?.();
+    },
+  };
+
   const form = el(
     'form',
     { method: 'dialog' },
-    title ? el('h2', { text: title }) : null,
-    body,
-    el('menu', { class: 'dialog-actions' }, ...actions),
+    options.title ? el('h2', { text: options.title }) : null,
+    options.body,
+    el('menu', { class: 'dialog-actions' }, ...options.actions(handle)),
   );
-
-  const dialog = el('dialog', { class: `dialog ${options.className ?? ''}`.trim() }, form) as HTMLDialogElement;
+  node.appendChild(form);
 
   form.addEventListener('submit', (event) => {
+    // Without this the dialog closes natively and none of the code below ever runs.
     event.preventDefault();
-    if (!onCommit) {
-      dialog.close();
-      return;
-    }
-    void Promise.resolve(onCommit(dialog)).then(() => {
-      // A dialog that closed during its own commit is finished with. Relying on the `close` event
-      // alone leaves the node in the page when the handler navigates or re-renders in the same
-      // turn, which is invisible but untidy.
-      if (!dialog.open) dialog.remove();
-    });
+    if (options.onCommit) void options.onCommit(handle);
+    else handle.dismiss();
   });
 
   if (options.dismissible === false) {
-    // Escape has nothing to go back to on the gate.
-    dialog.addEventListener('cancel', (event) => event.preventDefault());
+    node.addEventListener('cancel', (event) => event.preventDefault());
+  } else {
+    // Escape. The `cancel` event does fire; `close` is the unreliable one.
+    node.addEventListener('cancel', () => handle.dismiss());
   }
 
-  document.body.appendChild(dialog);
-  dialog.addEventListener('close', () => dialog.remove());
-  dialog.showModal();
-  return dialog;
+  document.body.appendChild(node);
+  node.showModal();
+  return handle;
 }
 
-function cancelButton(label = 'Cancel'): HTMLButtonElement {
-  const node = button(label, { class: 'ghost' });
-  node.addEventListener('click', () => node.closest('dialog')?.close());
-  return node;
+function cancelButton(dialog: Dialog, label = 'Cancel'): HTMLButtonElement {
+  return button(label, { class: 'ghost', onClick: () => dialog.dismiss() });
+}
+
+/** Settles a dialog's promise exactly once, whichever way out the person took. */
+function settler<T>(resolve: (value: T) => void): (value: T) => void {
+  let settled = false;
+  return (value: T) => {
+    if (settled) return;
+    settled = true;
+    resolve(value);
+  };
 }
 
 export function confirmDialog(title: string, message: string, confirmLabel = 'Delete'): Promise<boolean> {
   return new Promise((resolve) => {
-    let answer = false;
-    const dialog = shell(
+    const done = settler(resolve);
+    shell({
       title,
-      el('p', { class: 'dialog-text', text: message }),
-      [cancelButton(), button(confirmLabel, { class: 'danger-button', type: 'submit' })],
-      (self) => {
-        answer = true;
-        self.close();
+      body: el('p', { class: 'dialog-text', text: message }),
+      actions: (dialog) => [
+        cancelButton(dialog),
+        button(confirmLabel, { class: 'danger-button', type: 'submit' }),
+      ],
+      onCommit: (dialog) => {
+        done(true);
+        dialog.dismiss();
       },
-    );
-    dialog.addEventListener('close', () => resolve(answer));
+      // Reached by Cancel or Escape; a no-op after a commit, because `done` only fires once.
+      onDismiss: () => done(false),
+    });
   });
 }
 
 export function promptDialog(title: string, label: string, initial = ''): Promise<string | null> {
   return new Promise((resolve) => {
+    const done = settler(resolve);
     const input = el('input', { class: 'field', type: 'text', value: initial, required: true }) as HTMLInputElement;
-    let answer: string | null = null;
-    const dialog = shell(
+    shell({
       title,
-      el('label', { class: 'dialog-field' }, el('span', { text: label }), input),
-      [cancelButton(), button('Save', { class: 'primary', type: 'submit' })],
-      (self) => {
-        answer = input.value.trim() || null;
-        self.close();
+      body: el('label', { class: 'dialog-field' }, el('span', { text: label }), input),
+      actions: (dialog) => [cancelButton(dialog), button('Save', { class: 'primary', type: 'submit' })],
+      onCommit: (dialog) => {
+        done(input.value.trim() || null);
+        dialog.dismiss();
       },
-    );
-    dialog.addEventListener('close', () => resolve(answer));
+      onDismiss: () => done(null),
+    });
     setTimeout(() => input.select(), 30);
   });
 }
@@ -116,44 +154,29 @@ export function addStationDialog(onAdded: () => void): void {
   const status = el('p', { class: 'dialog-note' });
   const add = button('Add', { class: 'primary', type: 'submit' });
 
-  const file = el('input', {
+  const picker = el('input', {
     type: 'file',
     accept: '.m3u,.m3u8,.pls,audio/x-mpegurl,audio/x-scpls',
     class: 'file-input',
   }) as HTMLInputElement;
 
-  file.addEventListener('change', async () => {
-    const chosen = file.files?.[0];
-    if (!chosen) return;
-    status.textContent = 'Reading playlist…';
-    try {
-      const entries = await api.parsePlaylist(await chosen.text());
-      const added = store.importStations(entries);
-      toast(added === 0 ? 'Nothing new in that playlist.' : `Imported ${added} station${added === 1 ? '' : 's'}.`);
-      onAdded();
-      dialog.close();
-    } catch (error) {
-      status.textContent = `Could not read that file: ${(error as Error).message}`;
-    }
-  });
-
-  const dialog = shell(
-    'Add a station',
-    el(
+  const dialog = shell({
+    title: 'Add a station',
+    body: el(
       'div',
       {},
       el('label', { class: 'dialog-field' }, el('span', { text: 'Stream URL' }), url),
       el('label', { class: 'dialog-field' }, el('span', { text: 'Name' }), name),
       status,
       el('hr', { class: 'dialog-rule' }),
-      el('label', { class: 'dialog-field' }, el('span', { text: 'Or import an M3U / PLS playlist' }), file),
+      el('label', { class: 'dialog-field' }, el('span', { text: 'Or import an M3U / PLS playlist' }), picker),
       el('p', {
         class: 'dialog-note',
         text: "Transistor's own Export M3U works here — that is how this list arrived in the first place.",
       }),
     ),
-    [cancelButton(), add],
-    async (self) => {
+    actions: (self) => [cancelButton(self), add],
+    onCommit: async (self) => {
       const target = url.value.trim();
       if (target === '') return;
 
@@ -170,7 +193,7 @@ export function addStationDialog(onAdded: () => void): void {
           const added = store.importStations(resolved.playlist.map((entry) => ({ name: null, url: entry })));
           toast(`Imported ${added} station${added === 1 ? '' : 's'}.`);
           onAdded();
-          self.close();
+          self.dismiss();
           return;
         }
 
@@ -191,13 +214,28 @@ export function addStationDialog(onAdded: () => void): void {
         });
         toast('Station added.');
         onAdded();
-        self.close();
+        self.dismiss();
       } catch (error) {
         status.textContent = (error as Error).message;
         add.disabled = false;
       }
     },
-  );
+  });
+
+  picker.addEventListener('change', async () => {
+    const chosen = picker.files?.[0];
+    if (!chosen) return;
+    status.textContent = 'Reading playlist…';
+    try {
+      const entries = await api.parsePlaylist(await chosen.text());
+      const added = store.importStations(entries);
+      toast(added === 0 ? 'Nothing new in that playlist.' : `Imported ${added} station${added === 1 ? '' : 's'}.`);
+      onAdded();
+      dialog.dismiss();
+    } catch (error) {
+      status.textContent = `Could not read that file: ${(error as Error).message}`;
+    }
+  });
 
   setTimeout(() => url.focus(), 30);
 }
@@ -207,7 +245,11 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
   const name = el('input', { class: 'field', type: 'text', value: station.name, required: true }) as HTMLInputElement;
   const image = el('input', {
     class: 'field',
-    type: 'url',
+    // Text, not url: the seeded Tasty Radio station carries the bundled `/ophelia.png`, and a
+    // `type="url"` field rejects a relative path — which fails validation on submit and leaves you
+    // pressing Save on a dialog that refuses to close.
+    type: 'text',
+    inputmode: 'url',
     value: station.imageUrl ?? '',
     placeholder: 'https://…/logo.png',
   }) as HTMLInputElement;
@@ -218,9 +260,9 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
     required: true,
   }) as HTMLInputElement;
 
-  shell(
-    'Edit station',
-    el(
+  shell({
+    title: 'Edit station',
+    body: el(
       'div',
       {},
       el('label', { class: 'dialog-field' }, el('span', { text: 'Name' }), name),
@@ -231,8 +273,8 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
         text: 'The stream URL is yours to edit. Stations move, and a station you can fix is better than one you have to replace.',
       }),
     ),
-    [cancelButton(), button('Save', { class: 'primary', type: 'submit' })],
-    (self) => {
+    actions: (self) => [cancelButton(self), button('Save', { class: 'primary', type: 'submit' })],
+    onCommit: (self) => {
       if (name.value.trim() === '' || stream.value.trim() === '') return;
       store.updateStation(station.id, {
         name: name.value.trim(),
@@ -241,13 +283,18 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
       });
       toast('Saved.');
       onSaved();
-      self.close();
+      self.dismiss();
     },
-  );
+  });
   setTimeout(() => name.select(), 30);
 }
 
-/** One shared password, entered once. Not an account. */
+/**
+ * One shared password, entered once.
+ *
+ * Only shown when the server is configured with an access code; the site runs open by default, in
+ * which case this is never constructed.
+ */
 export function gateDialog(onPassed: () => void): void {
   const code = el('input', {
     class: 'field',
@@ -255,8 +302,8 @@ export function gateDialog(onPassed: () => void): void {
     required: true,
     autocomplete: 'current-password',
     placeholder: 'Access code',
-    // The code is case-sensitive, and a phone keyboard helpfully capitalising the first letter or
-    // autocorrecting it is not a failure the person typing it can see.
+    // The server matches case-insensitively and trims, but a phone keyboard silently capitalising
+    // the first letter is still a confusing thing to look at.
     autocapitalize: 'none',
     autocorrect: 'off',
     spellcheck: 'false',
@@ -264,9 +311,8 @@ export function gateDialog(onPassed: () => void): void {
   const status = el('p', { class: 'dialog-note' });
   const enter = button('Come in', { class: 'primary', type: 'submit' });
 
-  shell(
-    '',
-    el(
+  shell({
+    body: el(
       'div',
       {},
       el('img', { class: 'gate-logo', src: '/ophelia.png', alt: '' }),
@@ -278,13 +324,15 @@ export function gateDialog(onPassed: () => void): void {
       el('label', { class: 'dialog-field' }, el('span', { text: 'Access code' }), code),
       status,
     ),
-    [enter],
-    async (self) => {
+    actions: () => [enter],
+    dismissible: false,
+    className: 'gate',
+    onCommit: async (self) => {
       status.textContent = 'Checking…';
       enter.disabled = true;
       try {
         if (await api.submitCode(code.value)) {
-          self.close();
+          self.dismiss();
           onPassed();
           return;
         }
@@ -295,8 +343,7 @@ export function gateDialog(onPassed: () => void): void {
       enter.disabled = false;
       code.select();
     },
-    { dismissible: false, className: 'gate' },
-  );
+  });
 
   setTimeout(() => code.focus(), 30);
 }
