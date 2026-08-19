@@ -15,8 +15,20 @@ import { config } from './config.js';
 
 const COOKIE = 'tr_access';
 
+/**
+ * Case and surrounding whitespace are not the point of the gate.
+ *
+ * This is one code shared between friends over a text message, so it arrives with a trailing space
+ * from a copy-paste, or capitalised by a phone keyboard, or shouted in caps by the person who chose
+ * it. Rejecting those is a support burden for no security: the code is a doorbell, not a vault, and
+ * anyone who has the word at all is meant to be let in.
+ */
+function normalise(code: string): string {
+  return String(code).trim().toLowerCase();
+}
+
 function secret(): string {
-  return config.sessionSecret || `derived:${config.accessCode}`;
+  return config.sessionSecret || `derived:${normalise(config.accessCode)}`;
 }
 
 function token(): string {
@@ -47,9 +59,12 @@ export function isAuthed(req: http.IncomingMessage): boolean {
 
 export function checkCode(code: string): boolean {
   if (!gateEnabled()) return true;
-  const a = Buffer.from(String(code));
-  const b = Buffer.from(config.accessCode);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  // Hashing before comparing means the timing-safe compare always gets equal-length inputs, so a
+  // guess of the wrong length is rejected in constant time rather than immediately — which would
+  // otherwise leak how long the real code is.
+  const a = crypto.createHash('sha256').update(normalise(code)).digest();
+  const b = crypto.createHash('sha256').update(normalise(config.accessCode)).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 export function grantCookie(res: http.ServerResponse, secure: boolean): void {

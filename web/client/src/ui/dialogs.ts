@@ -5,18 +5,44 @@ import { button, el, toast } from './dom.js';
 
 /** Modals, kept to the few places where the app genuinely has a question to ask. */
 
-function shell(title: string, body: HTMLElement, actions: HTMLElement[]): HTMLDialogElement {
-  const dialog = el(
-    'dialog',
-    { class: 'dialog' },
-    el(
-      'form',
-      { method: 'dialog' },
-      el('h2', { text: title }),
-      body,
-      el('menu', { class: 'dialog-actions' }, ...actions),
-    ),
-  ) as HTMLDialogElement;
+/**
+ * One dialog shell, and one route out of it.
+ *
+ * ⚠️ **A `method="dialog"` form closes the dialog on submit without running any of your code**, and
+ * pressing Enter in a text field submits the form. So a dialog whose only handler is on the button's
+ * `click` does nothing at all when you type a value and hit Enter — it just vanishes, which reads as
+ * "the site is broken". That is exactly how the access-code dialog behaved on the day it shipped.
+ *
+ * Everything commits through [onCommit] instead: the form's submit event, which both Enter and the
+ * primary button (`type="submit"`) go through. Cancel buttons close the dialog directly.
+ */
+function shell(
+  title: string,
+  body: HTMLElement,
+  actions: HTMLElement[],
+  onCommit?: (dialog: HTMLDialogElement) => void | Promise<void>,
+  options: { dismissible?: boolean; className?: string } = {},
+): HTMLDialogElement {
+  const form = el(
+    'form',
+    { method: 'dialog' },
+    title ? el('h2', { text: title }) : null,
+    body,
+    el('menu', { class: 'dialog-actions' }, ...actions),
+  );
+
+  const dialog = el('dialog', { class: `dialog ${options.className ?? ''}`.trim() }, form) as HTMLDialogElement;
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (onCommit) void onCommit(dialog);
+    else dialog.close();
+  });
+
+  if (options.dismissible === false) {
+    // Escape has nothing to go back to on the gate.
+    dialog.addEventListener('cancel', (event) => event.preventDefault());
+  }
 
   document.body.appendChild(dialog);
   dialog.addEventListener('close', () => dialog.remove());
@@ -24,18 +50,24 @@ function shell(title: string, body: HTMLElement, actions: HTMLElement[]): HTMLDi
   return dialog;
 }
 
+function cancelButton(label = 'Cancel'): HTMLButtonElement {
+  const node = button(label, { class: 'ghost' });
+  node.addEventListener('click', () => node.closest('dialog')?.close());
+  return node;
+}
+
 export function confirmDialog(title: string, message: string, confirmLabel = 'Delete'): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
-    const dialog = shell(title, el('p', { class: 'dialog-text', text: message }), [
-      button('Cancel', { class: 'ghost', value: 'cancel' }),
-      button(confirmLabel, {
-        class: 'danger-button',
-        onClick: () => {
-          answer = true;
-        },
-      }),
-    ]);
+    const dialog = shell(
+      title,
+      el('p', { class: 'dialog-text', text: message }),
+      [cancelButton(), button(confirmLabel, { class: 'danger-button', type: 'submit' })],
+      (self) => {
+        answer = true;
+        self.close();
+      },
+    );
     dialog.addEventListener('close', () => resolve(answer));
   });
 }
@@ -47,15 +79,11 @@ export function promptDialog(title: string, label: string, initial = ''): Promis
     const dialog = shell(
       title,
       el('label', { class: 'dialog-field' }, el('span', { text: label }), input),
-      [
-        button('Cancel', { class: 'ghost', value: 'cancel' }),
-        button('Save', {
-          class: 'primary',
-          onClick: () => {
-            answer = input.value.trim() || null;
-          },
-        }),
-      ],
+      [cancelButton(), button('Save', { class: 'primary', type: 'submit' })],
+      (self) => {
+        answer = input.value.trim() || null;
+        self.close();
+      },
     );
     dialog.addEventListener('close', () => resolve(answer));
     setTimeout(() => input.select(), 30);
@@ -78,8 +106,13 @@ export function addStationDialog(onAdded: () => void): void {
   }) as HTMLInputElement;
   const name = el('input', { class: 'field', type: 'text', placeholder: 'Optional' }) as HTMLInputElement;
   const status = el('p', { class: 'dialog-note' });
+  const add = button('Add', { class: 'primary', type: 'submit' });
 
-  const file = el('input', { type: 'file', accept: '.m3u,.m3u8,.pls,audio/x-mpegurl,audio/x-scpls', class: 'file-input' }) as HTMLInputElement;
+  const file = el('input', {
+    type: 'file',
+    accept: '.m3u,.m3u8,.pls,audio/x-mpegurl,audio/x-scpls',
+    class: 'file-input',
+  }) as HTMLInputElement;
 
   file.addEventListener('change', async () => {
     const chosen = file.files?.[0];
@@ -96,10 +129,23 @@ export function addStationDialog(onAdded: () => void): void {
     }
   });
 
-  const add = button('Add', {
-    class: 'primary',
-    onClick: async (event: Event) => {
-      event.preventDefault();
+  const dialog = shell(
+    'Add a station',
+    el(
+      'div',
+      {},
+      el('label', { class: 'dialog-field' }, el('span', { text: 'Stream URL' }), url),
+      el('label', { class: 'dialog-field' }, el('span', { text: 'Name' }), name),
+      status,
+      el('hr', { class: 'dialog-rule' }),
+      el('label', { class: 'dialog-field' }, el('span', { text: 'Or import an M3U / PLS playlist' }), file),
+      el('p', {
+        class: 'dialog-note',
+        text: "Transistor's own Export M3U works here — that is how this list arrived in the first place.",
+      }),
+    ),
+    [cancelButton(), add],
+    async (self) => {
       const target = url.value.trim();
       if (target === '') return;
 
@@ -113,11 +159,10 @@ export function addStationDialog(onAdded: () => void): void {
           return;
         }
         if (resolved.playlist && resolved.playlist.length > 1) {
-          status.textContent = `That is a playlist of ${resolved.playlist.length} stations — importing all of them.`;
           const added = store.importStations(resolved.playlist.map((entry) => ({ name: null, url: entry })));
           toast(`Imported ${added} station${added === 1 ? '' : 's'}.`);
           onAdded();
-          dialog.close();
+          self.close();
           return;
         }
 
@@ -138,41 +183,18 @@ export function addStationDialog(onAdded: () => void): void {
         });
         toast('Station added.');
         onAdded();
-        dialog.close();
+        self.close();
       } catch (error) {
         status.textContent = (error as Error).message;
         add.disabled = false;
       }
     },
-  });
-
-  const dialog = shell(
-    'Add a station',
-    el(
-      'div',
-      {},
-      el('label', { class: 'dialog-field' }, el('span', { text: 'Stream URL' }), url),
-      el('label', { class: 'dialog-field' }, el('span', { text: 'Name' }), name),
-      status,
-      el('hr', { class: 'dialog-rule' }),
-      el(
-        'label',
-        { class: 'dialog-field' },
-        el('span', { text: 'Or import an M3U / PLS playlist' }),
-        file,
-      ),
-      el('p', {
-        class: 'dialog-note',
-        text: "Transistor's own Export M3U works here — that is how this list arrived in the first place.",
-      }),
-    ),
-    [button('Cancel', { class: 'ghost', value: 'cancel' }), add],
   );
 
   setTimeout(() => url.focus(), 30);
 }
 
-/** Long-press equivalent: change what a station is called, what it looks like, and where it plays from. */
+/** Change what a station is called, what it looks like, and where it plays from. */
 export function editStationDialog(station: Station, onSaved: () => void): void {
   const name = el('input', { class: 'field', type: 'text', value: station.name, required: true }) as HTMLInputElement;
   const image = el('input', {
@@ -181,9 +203,14 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
     value: station.imageUrl ?? '',
     placeholder: 'https://…/logo.png',
   }) as HTMLInputElement;
-  const stream = el('input', { class: 'field', type: 'url', value: station.streamUrl, required: true }) as HTMLInputElement;
+  const stream = el('input', {
+    class: 'field',
+    type: 'url',
+    value: station.streamUrl,
+    required: true,
+  }) as HTMLInputElement;
 
-  const dialog = shell(
+  shell(
     'Edit station',
     el(
       'div',
@@ -196,22 +223,18 @@ export function editStationDialog(station: Station, onSaved: () => void): void {
         text: 'The stream URL is yours to edit. Stations move, and a station you can fix is better than one you have to replace.',
       }),
     ),
-    [
-      button('Cancel', { class: 'ghost', value: 'cancel' }),
-      button('Save', {
-        class: 'primary',
-        onClick: () => {
-          if (name.value.trim() === '' || stream.value.trim() === '') return;
-          store.updateStation(station.id, {
-            name: name.value.trim(),
-            imageUrl: image.value.trim() || undefined,
-            streamUrl: stream.value.trim(),
-          });
-          toast('Saved.');
-          onSaved();
-        },
-      }),
-    ],
+    [cancelButton(), button('Save', { class: 'primary', type: 'submit' })],
+    (self) => {
+      if (name.value.trim() === '' || stream.value.trim() === '') return;
+      store.updateStation(station.id, {
+        name: name.value.trim(),
+        imageUrl: image.value.trim() || undefined,
+        streamUrl: stream.value.trim(),
+      });
+      toast('Saved.');
+      onSaved();
+      self.close();
+    },
   );
   setTimeout(() => name.select(), 30);
 }
@@ -224,15 +247,20 @@ export function gateDialog(onPassed: () => void): void {
     required: true,
     autocomplete: 'current-password',
     placeholder: 'Access code',
+    // The code is case-sensitive, and a phone keyboard helpfully capitalising the first letter or
+    // autocorrecting it is not a failure the person typing it can see.
+    autocapitalize: 'none',
+    autocorrect: 'off',
+    spellcheck: 'false',
   }) as HTMLInputElement;
   const status = el('p', { class: 'dialog-note' });
+  const enter = button('Come in', { class: 'primary', type: 'submit' });
 
-  const dialog = el(
-    'dialog',
-    { class: 'dialog gate' },
+  shell(
+    '',
     el(
-      'form',
-      { method: 'dialog' },
+      'div',
+      {},
       el('img', { class: 'gate-logo', src: '/ophelia.png', alt: '' }),
       el('h2', { text: 'Tasty Radio' }),
       el('p', {
@@ -241,31 +269,26 @@ export function gateDialog(onPassed: () => void): void {
       }),
       el('label', { class: 'dialog-field' }, el('span', { text: 'Access code' }), code),
       status,
-      el(
-        'menu',
-        { class: 'dialog-actions' },
-        button('Come in', {
-          class: 'primary',
-          onClick: async (event: Event) => {
-            event.preventDefault();
-            status.textContent = 'Checking…';
-            if (await api.submitCode(code.value)) {
-              dialog.close();
-              dialog.remove();
-              onPassed();
-            } else {
-              status.textContent = 'That is not the code.';
-              code.select();
-            }
-          },
-        }),
-      ),
     ),
-  ) as HTMLDialogElement;
+    [enter],
+    async (self) => {
+      status.textContent = 'Checking…';
+      enter.disabled = true;
+      try {
+        if (await api.submitCode(code.value)) {
+          self.close();
+          onPassed();
+          return;
+        }
+        status.textContent = 'That is not the code.';
+      } catch {
+        status.textContent = 'Could not reach the server — try again.';
+      }
+      enter.disabled = false;
+      code.select();
+    },
+    { dismissible: false, className: 'gate' },
+  );
 
-  // No cancel: there is nothing behind this until the code is right.
-  dialog.addEventListener('cancel', (event) => event.preventDefault());
-  document.body.appendChild(dialog);
-  dialog.showModal();
   setTimeout(() => code.focus(), 30);
 }
