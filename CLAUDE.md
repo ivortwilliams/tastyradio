@@ -1,10 +1,19 @@
 # Tasty Radio — project guide for Claude
 
 ## What this is
-**Tasty Radio** is a **native Android app written in Kotlin** for listening to internet radio
-streams — with one defining difference from every other radio app: it plays **several stations
-at once**, with **independent volume per station**, and can **record the resulting mix to a file
-you can share**.
+**Tasty Radio** plays internet radio with one defining difference from every other radio app: it
+plays **several stations at once**, with **independent volume per station**, and can **record the
+resulting mix to a file you can share**.
+
+It exists twice, over the same idea:
+
+- **`android/`** — a native Kotlin app. The original, and the one that replaced Transistor on the
+  owner's phone.
+- **`web/`** — the same desk in a browser, at **https://radio.truthseekersbyo.com**. Added
+  2026-08-19. Feature parity: mixing, per-channel tone, recording, and the same search.
+
+Both are described below. **[`docs/design/web.md`](docs/design/web.md)** covers what a browser
+forced to be different — read it before touching anything under `web/`.
 
 It is a personal/hobby project. The owner intends it to **replace Transistor on their phone**.
 
@@ -20,7 +29,8 @@ Read **[`docs/design/soundscape.md`](docs/design/soundscape.md)** before doing a
 implementation work — it is the real spec: the mixer architecture, recording approach, UI, build
 order, and risks. Its companion **[`docs/design/discovery.md`](docs/design/discovery.md)** covers
 how stations get *into* the app: the locally-downloaded station index, matching, and the Search
-page. Read that before touching search, sync or navigation.
+page. Read that before touching search, sync or navigation. **[`docs/design/web.md`](docs/design/web.md)**
+is the third: the web version, and the handful of places a browser forced a different answer.
 
 ### The reference app
 **[Transistor](https://github.com/y20k/transistor)** is the reference for *what the app should
@@ -85,6 +95,22 @@ Still open if ever wanted: named **scenes** (a saved set of stations + volumes),
 packs**, and **extra index sources** beyond radio-browser (SomaFM, Icecast/Xiph). Backup/restore
 beyond M3U export — images aren't in the export.
 See [`docs/design/soundscape.md`](docs/design/soundscape.md#build-order).
+
+### The web version (built 2026-08-19)
+**Live at https://radio.truthseekersbyo.com**, feature-complete against the phone: mixing, faders,
+the three-band isolator, reverb, delay, recording, the same search, the same seeded stations and
+mixes. Code in `web/`, design in [`docs/design/web.md`](docs/design/web.md), operations in
+[`web/README.md`](web/README.md).
+
+Verified on production: the shipped *Ritual Gregorian* mix playing both channels at their saved
+faders with 65% reverb on the chants, ICY titles arriving on both, and an 8-second take decoding to
+stereo 48 kHz at −21.4 dB RMS — real audio, not silence.
+
+**The one thing that forced a server**: a browser cannot put a cross-origin stream through Web
+Audio (the graph is tainted and outputs silence), and per-channel EQ, reverb, metering and recording
+are all Web Audio. Every stream is relayed same-origin by `web/server/src/proxy.ts`, which also
+strips ICY metadata, resolves playlists, rewrites HLS and follows redirects. Read `web.md` before
+touching any of it.
 
 ## Working preferences (from the owner)
 - Hobby project. **Bias toward shipping** — talk → change → working app.
@@ -182,7 +208,7 @@ brief:
     when driving `sdkmanager`/`avdmanager` directly.
   - Note the SDK's new naming: platforms carry **minor versions** now (`android-37.1`), and
     `compileSdk = 37` pairs with `compileSdkMinor = 1`.
-- **Use the Gradle wrapper** (`.\gradlew.bat`) — it's generated and committed. There's still no
+- **Use the Gradle wrapper** (`android\gradlew.bat`) — it's generated and committed. There's still no
   standalone `gradle` on PATH, which is fine.
 - **`java` on PATH is JDK 11** (`C:\Program Files\Eclipse Adoptium\jdk-11.0.26.4-hotspot`),
   which is **too old for modern Android Gradle Plugin** (AGP 8.x needs 17+). Point Gradle at
@@ -209,18 +235,21 @@ The app lives at **https://github.com/ivortwilliams/tastyradio** (public, person
   the `/releases/latest/download/…` URLs baked into old builds stop resolving. *Verified end to end:
   a 0.2 install offered 0.3, downloaded it, installed over itself and kept its data.*
 
-To ship an update: bump `versionCode` **and** `versionName` in `app/build.gradle.kts`, then
-`.\scripts
-elease.ps1 -Notes "what changed"`. Forgetting `versionCode` means nobody's phone
-notices. No CI — the signing key never left this machine, and a one-command script was cheaper than
+To ship an update: bump `versionCode` **and** `versionName` in `android/app/build.gradle.kts`, then
+`.\scripts\release.ps1 -Notes "what changed"` from the repo root. Forgetting `versionCode` means
+nobody's phone notices. No CI — the signing key never left this machine, and a one-command script was cheaper than
 a pipeline with a secret in it.
 
-DigitalOcean is available on the same account (`ivortawilliams@gmail.com`, token in
-`DIGITALOCEAN_ACCESS_TOKEN`) but is deliberately unused: GitHub Releases costs nothing, needs no
-server, and the CDN is better than a droplet.
+**DigitalOcean now hosts the web version** (same account, `ivortawilliams@gmail.com`, token in
+`DIGITALOCEAN_ACCESS_TOKEN`): one `s-1vcpu-1gb` droplet in Sydney named `tastyradio`, $6/month, at
+`radio.truthseekersbyo.com`. It is *not* used for the APK — GitHub Releases costs nothing, needs no
+server, and the CDN is better than a droplet. Deploy details in [`web/README.md`](web/README.md).
+
+**The `radio` A record is the only thing Tasty Radio added to `truthseekersbyo.com`.** That domain
+carries a live site and Google Workspace mail; leave the rest of its records alone.
 
 ### Building the APK by hand
-`.\gradlew.bat assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (~38 MB,
+**From `android/`.** `.\gradlew.bat assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (~38 MB,
 universal — every ABI, because a friend's phone is not a known quantity). It is signed with
 `tastyradio-release.jks`, whose passwords live in `keystore.properties`; **both are gitignored and
 both are irreplaceable** — a build signed with a different key won't install over one already on a
@@ -251,9 +280,32 @@ CLAUDE.md                    this file
 README.md                    short human-facing intro
 docs/design/soundscape.md    THE SPEC — mixer, recording, UI, navigation, build order
 docs/design/discovery.md     search — local station index, matching, the Search page
+docs/design/web.md           the web version — the proxy, the server-side index, the desk
 docs/reference/              Transistor reference screenshots + written breakdown
-gradle/libs.versions.toml    every dependency version
-app/src/main/java/com/tastyradio/
+docs/index.html              the install page (GitHub Pages serves docs/ on main — don't move it)
+scripts/release.ps1          one command to build + publish an APK release
+
+web/                         THE WEB VERSION — see docs/design/web.md
+  Dockerfile                 one image: client built in, served by the server process
+  deploy/                    docker-compose, Caddyfile, provision.sh (run once)
+  server/src/
+    main.ts                  the whole HTTP surface: one router, node:http, no framework
+    proxy.ts                 THE class equivalent — stream relay, ICY strip, playlist/HLS
+    net.ts                   outbound HTTP: SSRF guard, pinned DNS, insecureHTTPParser
+    index-store.ts           the FTS5 index (same schema and ranking as the phone)
+    search.ts / expand.ts    tokenise, expand, rank — ports of SearchRepository/QueryExpander
+    indexer.ts               builds the index; runs in GitHub Actions, not on the server
+    index-manager.ts         downloads the published index, swaps it in
+  client/src/
+    audio/graph.ts           ChannelFilters.kt in Web Audio nodes
+    audio/mixer.ts           Mixer.kt — the desk
+    audio/recorder.ts        MediaRecorder off the master bus
+    ui/desk.ts               the channel strips. The thing that makes it look like a desk
+    data/store.ts            collection + mixes in localStorage. No accounts, no server data
+
+android/                     THE ANDROID APP
+gradle/libs.versions.toml    every dependency version  (under android/)
+app/src/main/java/com/tastyradio/  (under android/)
   TastyRadioApp.kt           Application: Room, repository, Mixer, Coil loader. No DI framework
   data/                      Station, StationDao, TastyDb, StationRepository,
                              PlaylistParser (M3U/PLS), SeedStations (the owner's six)
@@ -341,3 +393,29 @@ app/src/main/java/com/tastyradio/
 - **Search ranking is split deliberately**: SQLite does BM25, then popularity and reachability are
   applied in Kotlin. SQLite's `log()` needs `SQLITE_ENABLE_MATH_FUNCTIONS`, which isn't worth
   depending on, and re-ranking a few hundred rows in Kotlin is free.
+
+### Learned building the web version (2026-08-19)
+- **`ICY 200 OK` is not HTTP and Node's parser knows it.** A large minority of SHOUTcast servers
+  answer with that status line instead of `HTTP/1.0 200 OK`, and Node rejects it outright — a chunk
+  of the corpus would look like a network failure. `insecureHTTPParser: true` is the equivalent of
+  the tolerance ExoPlayer already has.
+- **`audio/aacp` makes Chrome refuse a stream it can decode perfectly well.** RadCap — one of the
+  owner's own stations, and a channel in a shipped mix — is served with that Shoutcast content type,
+  and Chrome fails it with "no supported source was found" purely because of the label. The proxy
+  normalises the content type; the bytes are untouched.
+- **Node 20's happy-eyeballs calls a custom `lookup` with `all: true` and expects an array back.**
+  Answering with the single-address form fails with `ERR_INVALID_IP_ADDRESS` before a byte is sent.
+  The custom lookup exists to pin the connection to the address that passed the SSRF check.
+- **The stream proxy is an SSRF hole if you let it be.** It takes a URL as a query parameter, so
+  without a guard it will fetch `http://169.254.169.254/` and hand over the droplet's cloud-metadata
+  credentials. Every hostname is resolved and checked against the private ranges, the connection is
+  pinned to the address that passed, and every redirect hop is re-checked.
+- **Caddy needs `flush_interval -1` and `read_timeout 0`.** Without the first, audio arrives in
+  blocks and server-sent events are held back; without the second, every stream is cut off
+  mid-listen. Both are about the same thing: this site's traffic never ends.
+- **Recording is *easier* on the web.** No `MediaProjection` consent, no `RECORD_AUDIO`, no
+  foreground service type — the mix is already ours, so a `MediaStreamAudioDestinationNode` off the
+  master bus into `MediaRecorder` is the whole feature. Chrome supports `audio/mp4;codecs=mp4a.40.2`,
+  so the file is the same `.m4a` the phone makes.
+- **`web/server/public/` is generated** (Vite builds the client into it) and is gitignored. Do not
+  confuse it with `web/client/public/`, which holds real source assets like Ophelia.
