@@ -797,6 +797,11 @@ button:disabled {
   padding-top: 0.4rem;
 }
 
+/* Only a phone folds its knobs away; on a wide screen they are always on show. */
+.tone-toggle {
+  display: none;
+}
+
 .strip-foot {
   display: flex;
   gap: 0.3rem;
@@ -1244,27 +1249,196 @@ button:disabled {
     display: none;
   }
 
+  /*
+   * `flex: 1` on the base rule sets flex-basis: 0, which **beats** width: 100% — so this used to
+   * stay on the header's first line and get squeezed into whatever the wordmark left over (216px of
+   * the 337px it needs), and the tab bar scrolled sideways. The basis is the thing that has to
+   * change, not the width.
+   */
   .tabs {
     order: 3;
-    width: 100%;
-    overflow-x: auto;
+    flex: 1 0 100%;
+    gap: 0.2rem;
+  }
+
+  /* Four tabs, one row, no scrolling: they share the width instead of overflowing it. */
+  .tab {
+    flex: 1;
+    min-width: 0;
+    padding: 0.55rem 0.3rem;
+    text-align: center;
+    font-size: 0.88rem;
   }
 
   /*
-   * The vertical budget problem, same as on the phone: the desk and the page both want the bottom
-   * of the screen. Here the master section moves under the strips rather than beside them, and the
-   * strips scroll sideways — a desk you swipe along is still a desk.
+   * The desk stops being a console and becomes a list.
+   *
+   * Side by side channel strips are right on a wide screen and wrong on a phone: 164px strips mean
+   * swiping to reach channel three, and swiping sideways to operate an instrument is horrible. So on
+   * a phone each channel is a full-width row — name, level, fader — stacked vertically, and the tone
+   * knobs fold away behind a button because they are the part you set once and leave.
+   *
+   * Nothing scrolls sideways here. That is the whole point.
    */
   .desk-body {
     flex-direction: column;
     padding: 0 0.6rem 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .strips {
+    flex-direction: column;
+    overflow-x: visible;
+    gap: 0.4rem;
+    /*
+     * Four stacked channels would push the page above the desk to nothing, so the strips get a
+     * ceiling and scroll *vertically* past it — the direction a phone already scrolls, rather than
+     * the sideways swipe this layout exists to get rid of.
+     */
+    max-height: 38vh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  /* A slim invitation, not another full card. */
+  .strip-empty {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    min-height: 0;
   }
 
   .master {
+    padding: 0.45rem;
+  }
+
+  .meter-master {
+    height: 5px;
+  }
+
+  .strip {
     width: 100%;
-    grid-template-rows: auto;
-    grid-template-columns: auto 1fr auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'art  name acts'
+      'now  now  now'
+      'fade fade fade'
+      'tonea tonea tonea'
+      'toneb toneb toneb';
     align-items: center;
+    column-gap: 0.5rem;
+    row-gap: 0.25rem;
+    padding: 0.5rem 0.55rem;
+  }
+
+  /* Lets the artwork and the name become grid items in their own right. */
+  .strip-head {
+    display: contents;
+  }
+
+  .strip-head .art {
+    grid-area: art;
+  }
+
+  .strip-names {
+    grid-area: name;
+  }
+
+  .strip-now {
+    grid-area: now;
+    margin: 0;
+  }
+
+  .strip-foot {
+    grid-area: acts;
+    border: 0;
+    padding: 0;
+    gap: 0.25rem;
+  }
+
+  /* --- the fader lies down */
+  .fader-row {
+    grid-area: fade;
+    flex-direction: column;
+    height: auto;
+    gap: 0.3rem;
+    padding: 0;
+  }
+
+  .fader-row .meter {
+    width: 100%;
+    height: 6px;
+    align-items: stretch;
+  }
+
+  .fader-row .meter .meter-fill {
+    transform-origin: left;
+    transform: scaleX(var(--level));
+  }
+
+  .fader {
+    writing-mode: horizontal-tb;
+    direction: ltr;
+    -webkit-appearance: auto;
+    appearance: auto;
+    width: 100%;
+    height: 28px;
+  }
+
+  /* --- tone folds away; it is the part you set once and leave */
+  .knob-row {
+    grid-area: tonea;
+    display: none;
+    justify-content: space-around;
+  }
+
+  .knob-row-space {
+    grid-area: toneb;
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .strip[data-tone='open'] .knob-row {
+    display: flex;
+  }
+
+  .tone-toggle {
+    display: inline-grid;
+  }
+
+  .strip[data-tone='open'] .tone-toggle {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  /* --- master across the bottom */
+  .master {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .master-buttons {
+    flex-direction: row;
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  .master-buttons > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rec-clock {
+    flex: 0 0 auto;
+    min-width: 3ch;
   }
 
   .master-label {

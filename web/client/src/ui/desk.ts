@@ -3,7 +3,7 @@ import { MAX_DELAY_MS, MIN_DELAY_MS, type Tone } from '../audio/graph.js';
 import { Recorder, recordingSupported, titleForMix } from '../audio/recorder.js';
 import { formatDuration } from '../data/recordings.js';
 import { artwork } from './artwork.js';
-import { button, el, icon, replace, toast } from './dom.js';
+import { append, button, el, icon, replace, toast } from './dom.js';
 import { knob, type Knob } from './knob.js';
 
 /**
@@ -320,9 +320,20 @@ export class Desk {
       onClick: () => this.mixer.stop(channel.key),
     });
 
-    const node = el(
-      'article',
-      { class: 'strip', dataset: { key: channel.key } },
+    // Only ever visible on a phone, where the knobs are folded away to keep each channel one row.
+    const tone = button('', {
+      class: 'chip-button tone-toggle',
+      iconName: 'edit',
+      title: 'Tone: EQ, reverb and delay',
+      'aria-label': `Tone controls for ${station.name}`,
+      onClick: () => {
+        const open = node.dataset.tone === 'open';
+        node.dataset.tone = open ? 'closed' : 'open';
+      },
+    });
+
+    const node = el('article', { class: 'strip', dataset: { key: channel.key, tone: 'closed' } });
+    append(node, [
       el(
         'header',
         { class: 'strip-head' },
@@ -344,8 +355,8 @@ export class Desk {
         el('div', { class: 'delay-time-wrap' }, el('span', { class: 'knob-label', text: 'TIME' }), delayTime),
       ),
       el('div', { class: 'fader-row' }, el('div', { class: 'meter' }, meterFill), fader),
-      el('footer', { class: 'strip-foot' }, mute, solo, stop),
-    );
+      el('footer', { class: 'strip-foot' }, mute, solo, tone, stop),
+    ]);
 
     return {
       node,
