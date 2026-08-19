@@ -189,14 +189,13 @@ export class Mixer {
     entry.hls?.destroy();
     entry.hls = null;
 
-    // Reset the element before pointing it somewhere new. Assigning `src` over a source that is
-    // still tearing down makes the element report "no supported source was found" for a stream that
-    // is perfectly fine — and the tell is that pressing retry immediately afterwards works.
-    if (element.getAttribute('src') !== null) {
-      element.pause();
-      element.removeAttribute('src');
-      element.load();
-    }
+    // Pause before repointing, then load once.
+    //
+    // ⚠️ Do **not** clear `src` and call `load()` in between. That runs the resource selection
+    // algorithm against an empty source, which fires `error` with MEDIA_ERR_SRC_NOT_SUPPORTED — a
+    // spurious "no supported source was found" on a stream that is perfectly fine. It cost an
+    // evening: RadCap kept dying on the landing mix while the proxy was demonstrably serving it.
+    element.pause();
 
     // Most radio is a plain audio stream. HLS is a real but small minority of the corpus, and
     // hls.js is most of this app's JavaScript, so it is fetched only when something actually needs
@@ -288,6 +287,8 @@ export class Mixer {
     element.addEventListener('error', () => {
       // hls.js reports its own failures; the element's error during an HLS load is noise.
       if (entry.hls) return;
+      // An element with nothing to play is being torn down, not failing.
+      if (!element.getAttribute('src')) return;
       this.fail(entry, describeMediaError(element.error));
     });
     // A live stream that "ends" has dropped the connection.

@@ -19,6 +19,9 @@ import { knob, type Knob } from './knob.js';
  * state change would drop the fader out from under a finger mid-drag.
  */
 
+/** Remembers whether the desk is folded away, because on a phone that is a real preference. */
+const DESK_OPEN_KEY = 'tastyradio.desk.open';
+
 interface StripParts {
   node: HTMLElement;
   nowPlaying: HTMLElement;
@@ -74,11 +77,6 @@ export class Desk {
       iconName: 'chevron',
       title: 'Collapse the desk',
       'aria-label': 'Collapse the desk',
-      onClick: () => {
-        const open = this.node.dataset.open !== 'false';
-        this.node.dataset.open = String(!open);
-        collapse.title = open ? 'Open the desk' : 'Collapse the desk';
-      },
     });
 
     const master = el(
@@ -110,12 +108,54 @@ export class Desk {
       ),
     );
 
+    // The whole header toggles, not just the chevron. On a phone a 26px arrow is a poor target, and
+    // collapsing the desk is how you get the screen back for browsing — it should be easy to hit.
+    const head = el(
+      'header',
+      {
+        class: 'desk-head',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': 'Show or hide the mixing desk',
+      },
+      collapse,
+      this.title,
+      el('div', { class: 'spacer' }),
+    );
+
+    const setOpen = (open: boolean) => {
+      this.node.dataset.open = String(open);
+      head.setAttribute('aria-expanded', String(open));
+      collapse.title = open ? 'Collapse the desk' : 'Open the desk';
+      try {
+        localStorage.setItem(DESK_OPEN_KEY, String(open));
+      } catch {
+        /* private browsing; the desk just won't remember */
+      }
+    };
+
+    head.addEventListener('click', () => setOpen(this.node.dataset.open === 'false'));
+    head.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      setOpen(this.node.dataset.open === 'false');
+    });
+
     this.node = el(
       'section',
       { class: 'desk', dataset: { open: 'true' }, 'aria-label': 'The mixing desk' },
-      el('header', { class: 'desk-head' }, collapse, this.title, el('div', { class: 'spacer' })),
+      head,
       el('div', { class: 'desk-body' }, this.stripHost, master),
     );
+
+    // Remembered across visits: someone who folds the desk away on a phone means it.
+    let remembered: string | null = null;
+    try {
+      remembered = localStorage.getItem(DESK_OPEN_KEY);
+    } catch {
+      /* fine */
+    }
+    setOpen(remembered !== 'false');
 
     if (!recordingSupported()) {
       this.recordButton.disabled = true;

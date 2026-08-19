@@ -624,6 +624,19 @@ button:disabled {
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.desk-head:hover .desk-title,
+.desk-head:focus-visible .desk-title {
+  color: var(--ink);
+}
+
+.desk-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .desk-title {
@@ -1117,7 +1130,109 @@ button:disabled {
 
 /* ---------------------------------------------------------------- narrow screens */
 
+/*
+ * ---------------------------------------------------------------- phones
+ *
+ * The desk is the point of the app, so it stays on screen rather than hiding behind a pill as it
+ * does on Android. What changes is density: shorter strips, smaller knobs, and every control grown
+ * to something a thumb can actually hit. Measured on a 375-wide viewport, the desk went from taking
+ * 40% of the screen to about a quarter of it.
+ */
 @media (max-width: 720px) {
+  :root {
+    /* Narrower strips mean two fit side by side on a phone instead of one and a half. */
+    --strip-width: 164px;
+  }
+
+  /* Apple and Android both put the minimum comfortable target at around 44px. */
+  .chip-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .row-play {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tab {
+    padding: 0.6rem 0.9rem;
+  }
+
+  .desk-collapse {
+    width: 40px;
+    height: 40px;
+  }
+
+  .desk-head {
+    /* The whole bar is the toggle, so give it a thumb's worth of height. */
+    padding: 0.15rem 0.75rem;
+    min-height: 44px;
+  }
+
+  .master-buttons .ghost,
+  .rec-button {
+    min-height: 40px;
+  }
+
+  .primary,
+  .ghost,
+  .danger-button {
+    padding: 0.65rem 0.9rem;
+  }
+
+  .field,
+  .search-input {
+    /* Under 16px, iOS Safari zooms the whole page when the field takes focus. */
+    font-size: 16px;
+  }
+
+  /* --- a shorter desk, so the page above it keeps some room */
+  .fader-row {
+    height: 88px;
+  }
+
+  .knob-dial,
+  .knob-dial svg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .knob {
+    width: 40px;
+  }
+
+  .delay-time-wrap {
+    width: 40px;
+  }
+
+  .delay-time {
+    width: 38px;
+  }
+
+  .strip {
+    gap: 0.3rem;
+    padding: 0.45rem;
+  }
+
+  .strip-empty {
+    min-height: 0;
+  }
+
+  /* Dragging a fader or a knob should never select the label next to it. */
+  .desk {
+    user-select: none;
+    -webkit-user-select: none;
+    /* Clear of the iPhone home indicator. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .strips {
+    /* Swiping the desk sideways shouldn't drag the page around behind it. */
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+  }
+
   .top {
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
@@ -1236,4 +1351,27 @@ button:disabled {
 .curtain:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -6px;
+}
+
+/*
+ * A phone on its side, or a very short window: there is barely any room above the desk, so give the
+ * page most of what's left and let the desk get compact rather than squeezing the content to
+ * nothing.
+ */
+@media (max-height: 560px) and (max-width: 960px) {
+  .fader-row {
+    height: 64px;
+  }
+
+  .knob-row-space {
+    display: none;
+  }
+
+  .strip-now {
+    display: none;
+  }
+
+  .desk-head {
+    padding: 0.25rem 0.75rem;
+  }
 }
