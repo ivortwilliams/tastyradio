@@ -89,8 +89,11 @@ Working today:
   back again. Android claims `/m` as a **verified App Link** (`/.well-known/assetlinks.json`, served
   by the web server with the release key's fingerprint) and also accepts a link shared *into* it as
   `text/plain`. A phone without the app follows the same link to the web desk. Arriving mixes land on
-  the desk and ask before joining your collection. *Verified: a browser-made link decoded by the JVM
-  and back, and the phone's own link round-tripped through its own share sheet.*
+  the desk and ask before joining your collection. *Verified in all four directions: a browser-made link
+  decoded by the JVM and back, the phone's own link round-tripped through its own share sheet, and a
+  link made on the live site opening the released build straight from a tap — `pm get-app-links`
+  reporting `radio.truthseekersbyo.com: verified`, no chooser, both channels playing at 62/77% with
+  the 65% reverb intact.*
 - **Edit and remove stations**: long-press a row to change name, artwork (device photo picker) or
   stream URL; swipe left to remove, with confirmation.
 - **Settings that matter**: large buffer (~60s ahead, on by default), automatic index refresh
