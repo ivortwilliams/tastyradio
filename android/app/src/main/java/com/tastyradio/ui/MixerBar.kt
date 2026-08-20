@@ -68,6 +68,7 @@ fun MixerBar(
     onToggleRecording: () -> Unit,
     onTone: (String, Mixer.Tone) -> Unit,
     onSaveMix: () -> Unit,
+    onShareMix: () -> Unit,
 ) {
     if (channels.isEmpty()) return
     // One channel's tone controls open at a time: four channels' worth at once would fill the
@@ -126,11 +127,15 @@ fun MixerBar(
                             )
                         }
                     }
-                    // Saving lives here because this is where you are when it finally sounds right.
+                    // Saving lives here because this is where you are when it finally sounds right
+                    // — and so does sending it, for the same reason.
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.End,
                     ) {
+                        TextButton(onClick = onShareMix) {
+                            Text("Share mix", style = MaterialTheme.typography.labelLarge)
+                        }
                         TextButton(onClick = onSaveMix) {
                             Text("Save mix", style = MaterialTheme.typography.labelLarge)
                         }

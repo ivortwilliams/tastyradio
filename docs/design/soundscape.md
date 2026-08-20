@@ -196,6 +196,58 @@ that; it's the owner's call and not the app's business to police.
 
 ---
 
+## Sharing a mix (built 2026-08-20)
+
+Recording answers *let me send you what this sounded like*. This answers the other half: **let me
+send you the desk**, so you get the stations themselves, at the levels I set, with my reverb on the
+chants — live, and yours to move.
+
+**The mix travels in a link.** A mix is a handful of URLs and floats, so the whole thing fits in a
+URL and there is nothing else to build:
+
+```
+https://radio.truthseekersbyo.com/m#<payload>
+```
+
+`payload` is a marker character then base64url: `d` for raw-deflated JSON, `j` for the same JSON
+uncompressed (a browser without `CompressionStream`). Written and read by
+[`share/MixLink.kt`](../../android/app/src/main/java/com/tastyradio/share/MixLink.kt) and
+[`data/share.ts`](../../web/client/src/data/share.ts) — **the same bytes, both directions**, so a
+link made on the phone opens in a browser and back again. Around 320 characters for two channels
+with artwork and full tone, which is one line in a chat app rather than a paragraph.
+
+### The three decisions worth writing down
+
+**The payload is in the fragment, not the path.** Fragments are never sent to a server, so a mix you
+send someone is between the two of you: no row in a database, no id to look up, nothing in an access
+log. It is also why nothing expires — the link *is* the mix, so it keeps working for as long as the
+stations do, with no service of ours in the middle. This app has never had accounts or server-side
+user data, and sharing was not going to be the thing that introduced them.
+
+**The path is `/m` so Android can claim it.** An App Links filter matches on host and path and never
+on the fragment, so there has to be *some* path; claiming the whole host would mean every link to
+the site opened the app instead of the site. A phone with the app installed goes straight to the
+desk, a phone without it follows the same link to the web version, and neither person has to know
+which the other has. Verification is `/.well-known/assetlinks.json`, served by the web server with
+the release keystore's fingerprint in it — **re-sign with a different key and that file needs
+updating**, or phones quietly stop claiming links and fall back to the browser.
+
+**Opening a link is not consent to have someone else's stations in your list.** A shared mix carries
+stations, not references into the sender's collection, so it always plays — but it lands on the desk
+and asks. *Keep it* is the button that adds anything, and it goes through the same `save` the Save
+button uses, which matches on stream URL, so a station you already have is used as the row you
+already have and nothing duplicates.
+
+### Where it is in the app
+- **Android**: a share button on every mix card, *Share mix* in the open mixer sheet, and a
+  `text/plain` receive filter — because links arrive inside WhatsApp and Messenger as often as they
+  arrive as taps, and those open links in their own browser, from which *Share → Tasty Radio* is the
+  way out.
+- **Web**: a share button on every mix card and *Share what is playing* on the Mixes page.
+  `navigator.share` where there is one, the clipboard where there isn't.
+
+---
+
 ## UI: the mixer
 
 This is where Tasty Radio visibly stops being Transistor. Transistor's bottom pill shows *the*

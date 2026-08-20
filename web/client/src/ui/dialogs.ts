@@ -1,5 +1,6 @@
 import * as api from '../api.js';
 import * as store from '../data/store.js';
+import type { SharedMix } from '../data/share.js';
 import type { Station } from '../data/types.js';
 import { button, el, toast } from './dom.js';
 
@@ -346,4 +347,74 @@ export function gateDialog(onPassed: () => void): void {
   });
 
   setTimeout(() => code.focus(), 30);
+}
+
+/**
+ * Somebody sent you a mix.
+ *
+ * The link carries stations, not references to rows in *their* collection, so this can always be
+ * played — even if you have never heard of any of them. What it deliberately does not do is add
+ * anything to your collection behind your back: opening a link is not consent to have someone
+ * else's stations appear in your list. **Keep it** is the button that means that, and it is the
+ * primary one because it is usually what you want.
+ *
+ * Both play buttons are also the gesture that unblocks audio. A browser will not make a sound until
+ * the visitor has touched the page, and a dialog you have to answer is a better place to collect
+ * that touch than a curtain thrown over the top of it.
+ */
+export function sharedMixDialog(
+  shared: SharedMix,
+  handlers: { onPlay: () => void; onKeep: () => void },
+): void {
+  const lines = shared.channels.map((channel) => {
+    const tone: string[] = [];
+    if (channel.tone.reverb > 0.005) tone.push(`${Math.round(channel.tone.reverb * 100)}% reverb`);
+    if (channel.tone.delay > 0.005) tone.push(`${Math.round(channel.tone.delay * 100)}% delay`);
+    if ([channel.tone.low, channel.tone.mid, channel.tone.high].some((band) => band !== 0)) tone.push('EQ');
+    if (channel.muted) tone.push('muted');
+    return el(
+      'li',
+      {},
+      el('span', { class: 'mix-station', text: channel.station.name }),
+      el('span', { class: 'mix-level', text: `${Math.round(channel.fader * 100)}%` }),
+      tone.length > 0 ? el('span', { class: 'mix-tone', text: tone.join(' · ') }) : null,
+    );
+  });
+
+  const known = shared.channels.filter((channel) => store.stationByUrl(channel.station.streamUrl) !== undefined).length;
+  const fresh = shared.channels.length - known;
+
+  shell({
+    title: 'Someone sent you a mix',
+    body: el(
+      'div',
+      {},
+      el('h3', { class: 'shared-name', text: shared.name }),
+      el('ul', { class: 'mix-list' }, ...lines),
+      el('p', {
+        class: 'dialog-note',
+        text:
+          fresh === 0
+            ? 'You already have all of these stations.'
+            : `${fresh} station${fresh === 1 ? '' : 's'} you don't have yet — keeping the mix keeps ${fresh === 1 ? 'it' : 'them'} too.`,
+      }),
+    ),
+    className: 'shared-mix',
+    actions: (dialog) => [
+      cancelButton(dialog, 'Not now'),
+      button('Just play it', {
+        class: 'ghost',
+        iconName: 'play',
+        onClick: () => {
+          handlers.onPlay();
+          dialog.dismiss();
+        },
+      }),
+      button('Keep it', { class: 'primary', iconName: 'save', type: 'submit' }),
+    ],
+    onCommit: (dialog) => {
+      handlers.onKeep();
+      dialog.dismiss();
+    },
+  });
 }

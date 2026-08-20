@@ -261,6 +261,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    /*
+     * Android App Links: this is what lets a `/m#…` mix link open the phone app instead of the
+     * browser, with no "open with?" dialog in between. Google's verifier fetches this over HTTPS and
+     * checks the signing certificate of the installed APK against the fingerprint below — which is
+     * why it must be served from the site root, before the SPA fallback swallows it, and why it is
+     * public and unauthenticated even when the access code is on.
+     *
+     * The fingerprint belongs to `android/tastyradio-release.jks`. Re-signing with a different key
+     * means updating this file, or every phone quietly stops claiming the links.
+     */
+    if (pathname === '/.well-known/assetlinks.json') {
+      serveStatic(req, res, '/assetlinks.json');
+      return;
+    }
+
     // ---------------------------------------------------------------- the client
 
     serveStatic(req, res, pathname);

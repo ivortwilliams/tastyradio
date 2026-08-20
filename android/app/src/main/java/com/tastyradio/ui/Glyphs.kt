@@ -45,6 +45,28 @@ fun StopGlyph(size: Dp = 16.dp, tint: Color = MaterialTheme.colorScheme.onPrimar
     }
 }
 
+/**
+ * Three nodes joined by two lines: share. The one glyph everybody already recognises, and the
+ * reason there is still no icon dependency in this app.
+ */
+@Composable
+fun ShareGlyph(size: Dp = 18.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val radius = w * 0.14f
+        val line = w * 0.09f
+        val hub = Offset(radius, h * 0.5f)
+        val top = Offset(w - radius, radius)
+        val bottom = Offset(w - radius, h - radius)
+        drawLine(color = tint, start = hub, end = top, strokeWidth = line)
+        drawLine(color = tint, start = hub, end = bottom, strokeWidth = line)
+        drawCircle(color = tint, radius = radius, center = hub)
+        drawCircle(color = tint, radius = radius, center = top)
+        drawCircle(color = tint, radius = radius, center = bottom)
+    }
+}
+
 /** A filled triangle: play. */
 @Composable
 fun PlayGlyph(size: Dp = 18.dp, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {

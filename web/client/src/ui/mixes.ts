@@ -1,4 +1,5 @@
 import type { Mixer, Preset } from '../audio/mixer.js';
+import { handOver, mixLink, type Shareable } from '../data/share.js';
 import * as store from '../data/store.js';
 import { artwork } from './artwork.js';
 import { confirmDialog, promptDialog } from './dialogs.js';
@@ -32,6 +33,11 @@ export function mixesPage(mixer: Mixer, rerender: () => void): HTMLElement {
       el(
         'div',
         { class: 'page-actions' },
+        button('Share what is playing', {
+          class: 'ghost',
+          iconName: 'share',
+          onClick: () => void shareLive(mixer),
+        }),
         button('Save what is playing', {
           class: 'primary',
           iconName: 'save',
@@ -64,6 +70,32 @@ export async function saveCurrent(mixer: Mixer, rerender: () => void): Promise<v
   const extra = result.added > 0 ? ` (${result.added} new station${result.added === 1 ? '' : 's'} kept)` : '';
   toast(`${result.replaced ? 'Updated' : 'Saved'} "${name}"${extra}.`);
   rerender();
+}
+
+/**
+ * Hands a mix over as a link.
+ *
+ * The whole mix is *in* the link — stations, faders, mutes, EQ, reverb, delay — so there is nothing
+ * to keep alive on a server and nothing to expire. See `data/share.ts`.
+ */
+async function shareMix(name: string, channels: Shareable[]): Promise<void> {
+  if (channels.length === 0) {
+    toast('That mix has lost its stations.');
+    return;
+  }
+  const link = await mixLink(name, channels);
+  const result = await handOver(name, link);
+  if (result === 'copied') toast('Link copied — paste it to anyone.');
+  else if (result === 'failed') toast(link);
+}
+
+async function shareLive(mixer: Mixer): Promise<void> {
+  const channels = mixer.channels;
+  if (channels.length === 0) {
+    toast('Nothing playing to share.');
+    return;
+  }
+  await shareMix(channels.map((channel) => channel.station.name).join(' + ').slice(0, 60), channels);
 }
 
 function mixCard(mix: ReturnType<typeof store.mixes>[number], mixer: Mixer, rerender: () => void): HTMLElement {
@@ -118,6 +150,22 @@ function mixCard(mix: ReturnType<typeof store.mixes>[number], mixer: Mixer, rere
           mixer.load(presets);
           rerender();
         },
+      }),
+      button('', {
+        class: 'chip-button',
+        iconName: 'share',
+        title: 'Share',
+        'aria-label': `Share ${mix.name}`,
+        onClick: () =>
+          void shareMix(
+            mix.name,
+            stations.map((entry) => ({
+              station: entry.station,
+              fader: entry.channel.fader,
+              muted: entry.channel.muted,
+              tone: store.toneOrFlat(entry.channel.tone),
+            })),
+          ),
       }),
       button('', {
         class: 'chip-button',

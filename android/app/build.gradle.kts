@@ -26,8 +26,8 @@ android {
         // 29, not 24: AudioPlaybackCapture (the recording feature) does not exist below API 29.
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
     }
 
     signingConfigs {

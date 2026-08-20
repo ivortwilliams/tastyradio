@@ -53,6 +53,7 @@ fun MixesScreen(
     liveMixName: String?,
     contentPadding: PaddingValues,
     onPlay: (MixWithChannels) -> Unit,
+    onShare: (MixWithChannels) -> Unit,
     onRename: (Mix, String) -> Unit,
     onDelete: (Mix) -> Unit,
 ) {
@@ -75,6 +76,7 @@ fun MixesScreen(
                 stationsById = stationsById,
                 live = liveMixName == entry.mix.name,
                 onPlay = { onPlay(entry) },
+                onShare = { onShare(entry) },
                 onRename = { renaming = entry.mix },
                 onDelete = { deleting = entry.mix },
             )
@@ -82,7 +84,8 @@ fun MixesScreen(
 
         item {
             Text(
-                text = "Long-press a mix to rename it · swipe left to delete it",
+                text = "Long-press a mix to rename it · swipe left to delete it · " +
+                    "the share button sends the whole thing as a link",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -143,6 +146,7 @@ private fun SwipeableMixCard(
     stationsById: Map<Long, Station>,
     live: Boolean,
     onPlay: () -> Unit,
+    onShare: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -181,6 +185,7 @@ private fun SwipeableMixCard(
                 stationsById = stationsById,
                 live = live,
                 onPlay = onPlay,
+                onShare = onShare,
                 onRename = onRename,
             )
         }
@@ -194,6 +199,7 @@ private fun MixCard(
     stationsById: Map<Long, Station>,
     live: Boolean,
     onPlay: () -> Unit,
+    onShare: () -> Unit,
     onRename: () -> Unit,
 ) {
     val members = entry.channels.mapNotNull { stationsById[it.stationId] }
@@ -249,6 +255,14 @@ private fun MixCard(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+            }
+            // Sending a mix is the other half of saving one: a combination you found is worth
+            // more once somebody else can hear it.
+            Box(
+                modifier = Modifier.size(44.dp).clickable(onClick = onShare),
+                contentAlignment = Alignment.Center,
+            ) {
+                ShareGlyph(size = 17.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box(
                 modifier = Modifier.size(44.dp).clickable(onClick = onPlay),

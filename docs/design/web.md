@@ -253,6 +253,26 @@ Not an account system. Deliberately.
 
 ---
 
+## Sharing a mix: the same link on both sides
+
+Added 2026-08-20, and the one feature where the browser was the easy half. A mix is a handful of
+URLs and floats, so the whole thing goes in a link — `https://radio.truthseekersbyo.com/m#<payload>`
+— with the payload in the **fragment**, which browsers never send to a server. Nothing is stored
+here, nothing expires, and the same link opens the phone app.
+
+[`data/share.ts`](../../web/client/src/data/share.ts) and
+[`share/MixLink.kt`](../../android/app/src/main/java/com/tastyradio/share/MixLink.kt) write and read
+the same bytes: raw-deflated JSON, base64url, one marker character in front. `CompressionStream`
+with `deflate-raw` is the browser's name for what `Deflater(level, nowrap = true)` writes — plain
+`deflate` writes a zlib header the other side refuses, and the failure looks like a corrupt link
+rather than a mismatch. The full reasoning is in
+[`soundscape.md`](soundscape.md#sharing-a-mix-built-2026-08-20).
+
+The server's only part in this is `/.well-known/assetlinks.json`, served before the SPA fallback
+gets it, carrying the Android release key's fingerprint so a tapped link opens the app without an
+"open with?" dialog. It is public even when the access code is on, because Google's verifier is not
+going to type a password.
+
 ## What the web version does not have
 
 Written down so nobody looks for it:

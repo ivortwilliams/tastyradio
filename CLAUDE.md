@@ -82,6 +82,15 @@ Working today:
   channels by **stream URL**, not row id, and only seed when the mixes table is empty. *Verified on
   a clean install: three `AudioTrack`s from our uid all `state:started`, the reverbed channel's EQ
   lit.*
+- **Sharing a mix** (2026-08-20). A mix goes into a **link** — `radio.truthseekersbyo.com/m#<payload>`
+  — carrying the stations, faders, mutes, EQ, reverb and delay, with the payload in the **fragment**
+  so it never reaches a server. Same bytes on both platforms ([`MixLink.kt`](android/app/src/main/java/com/tastyradio/share/MixLink.kt)
+  / [`share.ts`](web/client/src/data/share.ts)): a link made on the phone opens in a browser and
+  back again. Android claims `/m` as a **verified App Link** (`/.well-known/assetlinks.json`, served
+  by the web server with the release key's fingerprint) and also accepts a link shared *into* it as
+  `text/plain`. A phone without the app follows the same link to the web desk. Arriving mixes land on
+  the desk and ask before joining your collection. *Verified: a browser-made link decoded by the JVM
+  and back, and the phone's own link round-tripped through its own share sheet.*
 - **Edit and remove stations**: long-press a row to change name, artwork (device photo picker) or
   stream URL; swipe left to remove, with confirmation.
 - **Settings that matter**: large buffer (~60s ahead, on by default), automatic index refresh
@@ -99,7 +108,7 @@ See [`docs/design/soundscape.md`](docs/design/soundscape.md#build-order).
 ### The web version (built 2026-08-19)
 **Live at https://radio.truthseekersbyo.com**, feature-complete against the phone: mixing, faders,
 the three-band isolator, reverb, delay, recording, the same search, the same seeded stations and
-mixes. Code in `web/`, design in [`docs/design/web.md`](docs/design/web.md), operations in
+mixes, and the same **shareable mix links**. Code in `web/`, design in [`docs/design/web.md`](docs/design/web.md), operations in
 [`web/README.md`](web/README.md).
 
 Verified on production: the shipped *Ritual Gregorian* mix playing both channels at their saved
@@ -302,6 +311,7 @@ web/                         THE WEB VERSION — see docs/design/web.md
     audio/recorder.ts        MediaRecorder off the master bus
     ui/desk.ts               the channel strips. The thing that makes it look like a desk
     data/store.ts            collection + mixes in localStorage. No accounts, no server data
+    data/share.ts            a mix in a link — the wire format, shared with MixLink.kt
 
 android/                     THE ANDROID APP
 gradle/libs.versions.toml    every dependency version  (under android/)
@@ -311,6 +321,7 @@ app/src/main/java/com/tastyradio/  (under android/)
                              PlaylistParser (M3U/PLS), SeedStations (the owner's six)
   playback/                  Mixer (THE class — player pool, faders, audio focus),
                              SoundscapePlayer (SimpleBasePlayer aggregate), SoundscapeService
+  share/MixLink.kt           a mix in a link — the wire format, shared with web/data/share.ts
   ui/                        MainActivity, RootScreen (3 tabs), StationListScreen, MixerBar,
                              SearchScreen + SettingsScreen (placeholders), AddStationDialog,
                              StationArtwork, Glyphs (hand-drawn — no icon dependency), theme/
@@ -342,6 +353,13 @@ app/src/main/java/com/tastyradio/  (under android/)
   while the *content* stayed identical, and Settings shows that number. `VACUUM` needs a
   `wal_checkpoint(TRUNCATE)` **after** it as well as before, or the write-ahead log left behind is
   bigger than the database it just compacted. Steady at 41 MB now.
+- **A shared mix link is `deflate-raw`, not `deflate`.** The browser's `CompressionStream('deflate-raw')`
+  matches `Deflater(level, nowrap = true)` and nothing else — plain `Deflater` writes a zlib header
+  the browser refuses, and the failure reads as a corrupt link rather than a format mismatch. The
+  same trap in reverse for `Inflater(true)`.
+- **`assetlinks.json` carries the release keystore's SHA-256 fingerprint.** Re-sign the app with a
+  different key and every phone silently stops claiming mix links and falls back to the browser —
+  which still works, so nothing looks broken, which is why it's written down here.
 - Becoming-noisy (headphones unplugged) stops **all** channels, from a single receiver.
 - Volume sliders need a perceptual curve (roughly `volume = slider³`, or a dB taper) —
   `ExoPlayer.volume` is linear amplitude and feels wrong mapped straight to a fader.

@@ -36,6 +36,7 @@ import com.tastyradio.data.StationRepository
 import com.tastyradio.playback.Mixer
 import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
+import com.tastyradio.share.MixLink
 import com.tastyradio.update.Updater
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -77,6 +78,9 @@ fun RootScreen(
     search: SearchRepository,
     settings: Settings,
     updater: Updater,
+    /** A mix that arrived as a link, waiting to be offered. See [MixLink]. */
+    sharedMix: MixLink.Shared? = null,
+    onSharedMixHandled: () -> Unit = {},
 ) {
     val settingsValues by settings.values.collectAsStateWithLifecycle(initialValue = Settings.Values())
     var tab by remember { mutableStateOf(Tab.Mixes) }
@@ -147,6 +151,20 @@ fun RootScreen(
                     onRetry = mixer::retry,
                     onTone = mixer::setTone,
                     onSaveMix = { showSaveMix = true },
+                    onShareMix = {
+                        MixLink.share(
+                            context,
+                            liveMixName ?: channels.joinToString(" + ") { it.station.name },
+                            channels.map {
+                                MixLink.Channel(
+                                    station = it.station,
+                                    fader = it.fader,
+                                    muted = it.muted,
+                                    tone = it.tone,
+                                )
+                            },
+                        )
+                    },
                     recording = recording,
                     onToggleRecording = {
                         if (recording is Recorder.State.Recording) {
@@ -226,6 +244,31 @@ fun RootScreen(
                         mixer.load(presets)
                         liveMixName = entry.mix.name
                         notify("Playing ${entry.mix.name}.")
+                    }
+                },
+                onShare = { entry ->
+                    val byId = stations.associateBy { it.id }
+                    val channels = entry.channels.mapNotNull { channel ->
+                        byId[channel.stationId]?.let { station ->
+                            MixLink.Channel(
+                                station = station,
+                                fader = channel.fader,
+                                muted = channel.muted,
+                                tone = Mixer.Tone(
+                                    low = channel.toneLow,
+                                    mid = channel.toneMid,
+                                    high = channel.toneHigh,
+                                    reverb = channel.reverb,
+                                    delay = channel.delay,
+                                    delayMs = channel.delayMs,
+                                ),
+                            )
+                        }
+                    }
+                    if (channels.isEmpty()) {
+                        notify("None of that mix's stations are in your collection any more.")
+                    } else {
+                        MixLink.share(context, entry.mix.name, channels)
                     }
                 },
                 onRename = { mix, name ->
@@ -394,6 +437,54 @@ fun RootScreen(
             repository = repository,
             onDismiss = { showAddStation = false },
             onResult = notify,
+        )
+    }
+
+    sharedMix?.let { shared ->
+        SharedMixDialog(
+            shared = shared,
+            knownUrls = stations.map { it.streamUrl }.toSet(),
+            onDismiss = onSharedMixHandled,
+            onOpen = { keep ->
+                // A station you already have is used as the row you already have, so a shared mix
+                // never leaves a duplicate behind and your own artwork and edits survive.
+                val byUrl = stations.associateBy { it.streamUrl }
+                mixer.load(
+                    shared.channels.map { channel ->
+                        Mixer.Preset(
+                            station = byUrl[channel.station.streamUrl] ?: channel.station,
+                            fader = channel.fader,
+                            muted = channel.muted,
+                            tone = channel.tone,
+                        )
+                    }
+                )
+                liveMixName = shared.name
+                onSharedMixHandled()
+                if (keep) {
+                    scope.launch {
+                        // Never on top of a mix you already have: everyone starts with the same
+                        // three shipped soundscapes, so a friend's “Ritual Gregorian” arriving
+                        // must not quietly replace yours.
+                        val name = mixRepository.availableName(shared.name)
+                        // The same save the Save button uses, which is what collects the stations
+                        // that aren't yours yet — matched by stream URL, so nothing duplicates.
+                        val result = mixRepository.save(name, mixer.channels.value)
+                        if (result.stations > 0) liveMixName = name
+                        val renamed = if (name != shared.name) " as “$name”" else ""
+                        notify(
+                            when {
+                                result.stations == 0 -> "Could not keep that mix."
+                                result.added > 0 ->
+                                    "Kept “${shared.name}”$renamed · ${result.added} added to your stations"
+                                else -> "Kept “${shared.name}”$renamed"
+                            }
+                        )
+                    }
+                } else {
+                    notify("Playing ${shared.name}.")
+                }
+            },
         )
     }
 

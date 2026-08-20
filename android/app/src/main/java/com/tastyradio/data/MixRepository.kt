@@ -133,6 +133,23 @@ class MixRepository(
         }
     }
 
+    /**
+     * A name that won't collide with a mix you already have.
+     *
+     * [save] treats a name you already used as *update this mix*, which is right when you are
+     * tweaking your own levels and saving again — and wrong for a mix somebody sent you. Everybody
+     * starts with the same three shipped soundscapes, so a friend sending you their *Ritual
+     * Gregorian* would otherwise quietly replace yours with theirs. Keeping a shared mix keeps it
+     * alongside, never on top.
+     */
+    suspend fun availableName(preferred: String): String {
+        val clean = preferred.trim().ifEmpty { "A shared mix" }
+        if (dao.findByName(clean) == null) return clean
+        var attempt = 2
+        while (dao.findByName("$clean ($attempt)") != null) attempt++
+        return "$clean ($attempt)"
+    }
+
     suspend fun rename(mix: Mix, name: String) {
         val cleanName = name.trim()
         if (cleanName.isNotEmpty()) dao.rename(mix.id, cleanName)

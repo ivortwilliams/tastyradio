@@ -2,9 +2,10 @@ import './styles.css';
 import * as api from './api.js';
 import { Mixer } from './audio/mixer.js';
 import { download, share, sharingAvailable, formatDuration } from './data/recordings.js';
+import { decodeMix, payloadIn, SHARE_PATH, type SharedMix } from './data/share.js';
 import * as store from './data/store.js';
 import { Desk } from './ui/desk.js';
-import { addStationDialog, gateDialog } from './ui/dialogs.js';
+import { addStationDialog, gateDialog, sharedMixDialog } from './ui/dialogs.js';
 import { button, el, relativeTime, replace, toast } from './ui/dom.js';
 import { mixesPage, saveCurrent } from './ui/mixes.js';
 import { recordingsPage } from './ui/recordings.js';
@@ -38,6 +39,10 @@ async function boot(): Promise<void> {
 
 async function start(): Promise<void> {
   store.seedIfEmpty();
+
+  // Answered before anything reads the hash, because a mix link lives in the same place the tab
+  // name does — and because what arrived decides whether the house mix gets cued at all.
+  const arrived = await incomingMix();
 
   const mixer = new Mixer();
   const page = el('main', { class: 'page-host', id: 'page' });
@@ -155,7 +160,69 @@ async function start(): Promise<void> {
 
   void showIndexStatus(indexNote);
   rerender();
-  cueTheHouseMix(mixer, rerender);
+  if (arrived) openSharedMix(arrived, mixer, rerender);
+  else cueTheHouseMix(mixer, rerender);
+}
+
+/**
+ * A mix somebody sent, read out of the address bar.
+ *
+ * Everything is in the fragment, so this never reached the server: opening a link is a private act
+ * between the two of you. The payload is taken out of the URL either way — a mix is something you
+ * either keep or don't, and leaving 300 characters of base64 in the address bar (and in their
+ * history, and in whatever they bookmark) serves nobody.
+ */
+async function incomingMix(): Promise<SharedMix | null> {
+  const path = location.pathname.replace(/\/$/, '');
+  if (path !== SHARE_PATH && !path.startsWith(`${SHARE_PATH}/`)) return null;
+  const payload = payloadIn(location.href);
+  if (payload === null) {
+    history.replaceState(null, '', '/#mixes');
+    return null;
+  }
+
+  const shared = await decodeMix(payload);
+  history.replaceState(null, '', '/#mixes');
+  if (!shared) toast('That mix link is damaged — ask whoever sent it to send it again.');
+  return shared;
+}
+
+/**
+ * Puts a shared mix on the desk, cued, and asks whether to keep it.
+ *
+ * Loading it is not keeping it. Someone else's stations do not join your collection because you
+ * clicked a link — that only happens if you answer the dialog with **Keep it**, which then goes
+ * through the same `saveMix` the Save button uses, so the stations come along exactly as they do
+ * for a channel auditioned out of search.
+ */
+function openSharedMix(shared: SharedMix, mixer: Mixer, rerender: () => void): void {
+  mixer.load(
+    shared.channels.map((channel) => ({
+      station: channel.station,
+      fader: channel.fader,
+      muted: channel.muted,
+      tone: channel.tone,
+    })),
+  );
+  rerender();
+
+  sharedMixDialog(shared, {
+    onPlay: () => void mixer.unblock(),
+    onKeep: () => {
+      // Never on top of a mix you already have: every browser starts with the same three shipped
+      // soundscapes, so a friend's "Ritual Gregorian" must not quietly replace yours.
+      const name = store.availableMixName(shared.name);
+      const result = store.saveMix(name, mixer.channels);
+      void mixer.unblock();
+      rerender();
+      const renamed = name === shared.name ? '' : ` as "${name}"`;
+      toast(
+        result.stations === 0
+          ? 'Could not keep that mix.'
+          : `Kept "${shared.name}"${renamed}${result.added > 0 ? ` · ${result.added} new station${result.added === 1 ? '' : 's'}` : ''}.`,
+      );
+    },
+  });
 }
 
 /** What plays when you land. The soundscape the app was built to demonstrate. */

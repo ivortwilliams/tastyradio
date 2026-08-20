@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tastyradio",
+      "sha256_cert_fingerprints": [
+        "FA:D7:CF:C9:06:3E:EE:21:12:41:C1:EC:74:B9:A6:F4:47:AD:D3:81:DC:68:D3:75:AE:15:17:47:32:EF:D9:6F"
+      ]
+    }
+  }
+]

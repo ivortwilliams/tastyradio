@@ -1110,6 +1110,18 @@ button:disabled {
   justify-content: center;
 }
 
+/* A mix somebody sent: the same list the mix cards draw, inside the dialog that asks about it. */
+.shared-mix .shared-name {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+
+.shared-mix .mix-list {
+  gap: 0.3rem;
+  font-size: 0.82rem;
+}
+
 /* ---------------------------------------------------------------- toast */
 
 .toast {

@@ -181,6 +181,23 @@ export function saveMix(name: string, channels: Channel[]): { stations: number; 
   return { stations: saveable.length, replaced: existing !== undefined, added };
 }
 
+/**
+ * A name that won't collide with a mix you already have.
+ *
+ * [saveMix] treats a name you already used as *update this mix*, which is right when you are
+ * tweaking your own levels and saving again — and wrong for a mix somebody sent you. Every browser
+ * starts with the same three shipped soundscapes, so a friend sending you their *Ritual Gregorian*
+ * would otherwise quietly replace yours with theirs. Keeping a shared mix keeps it alongside.
+ */
+export function availableMixName(preferred: string): string {
+  const clean = preferred.trim() || 'A shared mix';
+  const taken = (name: string): boolean => snapshot.mixes.some((mix) => mix.name === name);
+  if (!taken(clean)) return clean;
+  let attempt = 2;
+  while (taken(`${clean} (${attempt})`)) attempt++;
+  return `${clean} (${attempt})`;
+}
+
 export function renameMix(id: string, name: string): void {
   const mix = snapshot.mixes.find((candidate) => candidate.id === id);
   if (!mix || name.trim() === '') return;

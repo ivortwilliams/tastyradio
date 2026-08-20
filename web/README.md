@@ -22,6 +22,12 @@ deploy/     docker-compose.yml, Caddyfile, provision.sh
 Dockerfile  builds both halves into one image
 ```
 
+**`client/public/assetlinks.json` is served at `/.well-known/assetlinks.json`** (routed in
+`server/src/main.ts`, before the SPA fallback swallows it). It carries the Android release key's
+SHA-256 fingerprint, and it is what lets a shared mix link — `/m#…` — open the phone app instead of
+the browser. **Re-sign the APK with a different key and this file has to change**, or phones quietly
+stop claiming links. Nothing looks broken when that happens, which is the problem.
+
 **The stream proxy is the reason a server exists at all.** A browser cannot put a cross-origin
 stream through Web Audio — the graph is tainted and outputs silence — and per-channel EQ, reverb,
 metering and recording are all Web Audio. It also fixes ICY metadata, playlist files, HLS, redirects

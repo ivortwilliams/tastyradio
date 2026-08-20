@@ -31,14 +31,50 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TastyRadio">
 
+        <!--
+            singleTask so a mix link tapped while the app is already open arrives at the running
+            instance through onNewIntent, instead of stacking a second copy on top of a playing mix.
+        -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.TastyRadio">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                A shared mix. The whole mix is in the link's fragment (see share/MixLink.kt), and
+                this filter is what makes tapping one open the app rather than the browser — with no
+                "open with?" dialog, because autoVerify checks this build's signing certificate
+                against https://radio.truthseekersbyo.com/.well-known/assetlinks.json.
+
+                Scoped to /m rather than the whole host on purpose: claiming everything would mean a
+                link to the website itself opened the app instead of the site. A phone without the
+                app installed follows the same link to the web desk, which plays the same mix.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="radio.truthseekersbyo.com"
+                    android:pathPrefix="/m" />
+            </intent-filter>
+
+            <!--
+                A mix shared *into* the app. Links arrive inside WhatsApp and Messenger as often as
+                they arrive as taps, and those open links in their own in-app browser — from which
+                "Share → Tasty Radio" is the way out.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 
