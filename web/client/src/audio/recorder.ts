@@ -4,9 +4,12 @@ import { saveRecording, type Recording } from '../data/recordings.js';
  * Records what the desk is putting out — the whole mix, exactly as heard — into a shareable file.
  *
  * The Android app has to ask the system for a playback capture of its own UID because the mixing
- * happens in the platform. Here the mix is ours: a `MediaStreamAudioDestinationNode` hangs off the
- * master bus and `MediaRecorder` encodes it. No permission prompt, no consent dialog, and no
- * `RECORD_AUDIO` — the microphone is never anywhere near this.
+ * happens in the platform. Here the mix is ours: a `MediaStreamAudioDestinationNode` is hung off the
+ * master bus for the duration of the take and `MediaRecorder` encodes it. No permission prompt, no
+ * consent dialog, and no `RECORD_AUDIO` — the microphone is never anywhere near this.
+ *
+ * The tap is opened when recording starts and closed when it ends. It used to be connected for the
+ * life of the page, which costs a phone real CPU for a feature nobody is using yet.
  *
  * The tap is **post-fader**, as on the phone, so the take is exactly what you heard, clipping and
  * all. Watch for that when several loud channels sum — a single station can already peak at 0 dBFS.
@@ -42,6 +45,17 @@ export function recordingSupported(): boolean {
   return pickFormat() !== null;
 }
 
+/**
+ * Where a take comes from: the master bus, tapped only while recording.
+ *
+ * The `Mixer` is what actually implements this — it is an interface so the recorder doesn't need to
+ * know about mixing, and the tap doesn't need to exist until somebody presses record.
+ */
+export interface RecordBus {
+  openRecordTap(): MediaStream;
+  closeRecordTap(): void;
+}
+
 export class Recorder {
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
@@ -52,7 +66,7 @@ export class Recorder {
 
   state: RecorderState = { kind: 'idle' };
 
-  constructor(private readonly stream: MediaStream) {}
+  constructor(private readonly bus: RecordBus) {}
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -81,11 +95,12 @@ export class Recorder {
     }
 
     try {
-      this.recorder = new MediaRecorder(this.stream, {
+      this.recorder = new MediaRecorder(this.bus.openRecordTap(), {
         mimeType: format.mime,
         audioBitsPerSecond: 128_000,
       });
     } catch (error) {
+      this.bus.closeRecordTap();
       this.state = { kind: 'failed', reason: (error as Error).message };
       this.changed();
       return;
@@ -100,6 +115,7 @@ export class Recorder {
       if (event.data.size > 0) this.chunks.push(event.data);
     };
     this.recorder.onerror = () => {
+      this.bus.closeRecordTap();
       this.state = { kind: 'failed', reason: 'the recorder stopped unexpectedly' };
       this.changed();
     };
@@ -124,6 +140,9 @@ export class Recorder {
   }
 
   private async finish(mime: string): Promise<void> {
+    // Off the master bus the moment the take ends: an idle tap is a whole extra sink pulling the
+    // graph, which is exactly the sort of thing a phone notices and a laptop doesn't.
+    this.bus.closeRecordTap();
     const durationMs = Date.now() - this.startedAt;
     const blob = new Blob(this.chunks, { type: mime });
     this.chunks = [];

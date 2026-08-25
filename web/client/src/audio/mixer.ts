@@ -69,7 +69,7 @@ export class Mixer {
   readonly ctx: AudioContext;
   readonly master: GainNode;
   /** What the recorder taps. Post-fader, so a take is exactly what you heard. */
-  readonly recordTap: MediaStreamAudioDestinationNode;
+  private tap: MediaStreamAudioDestinationNode | null = null;
 
   private readonly live = new Map<string, Live>();
   private readonly listeners = new Set<() => void>();
@@ -85,9 +85,7 @@ export class Mixer {
     this.ctx = new AudioContext({ latencyHint: 'playback' });
     this.master = this.ctx.createGain();
     this.master.gain.value = 1;
-    this.recordTap = this.ctx.createMediaStreamDestination();
     this.master.connect(this.ctx.destination);
-    this.master.connect(this.recordTap);
 
     let sid = sessionStorage.getItem('tastyradio.sid');
     if (!sid) {
@@ -97,6 +95,31 @@ export class Mixer {
     this.sid = sid;
     this.listenForMetadata();
     this.wireMediaSession();
+  }
+
+  // ---------------------------------------------------------------- recording
+
+  /**
+   * The master bus as a stream, live only while a recording is running.
+   *
+   * A `MediaStreamAudioDestinationNode` is not free: it is a second sink pulling the whole graph
+   * into a WebRTC track every render quantum, whether or not anyone is recording. It used to be
+   * connected for the life of the page, which on a desktop is invisible and on a phone is a share
+   * of the budget that the crackling came out of.
+   */
+  openRecordTap(): MediaStream {
+    if (!this.tap) this.tap = this.ctx.createMediaStreamDestination();
+    this.master.connect(this.tap);
+    return this.tap.stream;
+  }
+
+  closeRecordTap(): void {
+    if (!this.tap) return;
+    try {
+      this.master.disconnect(this.tap);
+    } catch {
+      /* already closed */
+    }
   }
 
   // ---------------------------------------------------------------- observation

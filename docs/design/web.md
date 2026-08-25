@@ -139,8 +139,10 @@ Android has to ask the system for an `AudioPlaybackCapture` of its own UID, whic
 `MediaProjection` consent dialog every session, the `RECORD_AUDIO` permission even though the
 microphone is never opened, a `mediaProjection` foreground service type, and an API 29 floor.
 
-Here the mix is already ours. A `MediaStreamAudioDestinationNode` hangs off the master bus and
-`MediaRecorder` encodes it. No permission prompt, no consent dialog, no microphone anywhere near it.
+Here the mix is already ours. A `MediaStreamAudioDestinationNode` is hung off the master bus for the
+duration of the take and `MediaRecorder` encodes it. No permission prompt, no consent dialog, no
+microphone anywhere near it. It is connected only while recording — an idle tap still pulls the
+whole graph into a WebRTC track every render quantum, which a phone notices.
 
 The tap is **post-fader**, as on the phone, so the take is exactly what you heard — clipping and
 all. Format preference is AAC in MP4 first, so a recording made here is the same `.m4a` the phone
@@ -305,6 +307,43 @@ building rather than a plain redirect table.
 both channels of Ritual Gregorian back on the desk at 62/77% with the 65% reverb; and the ciphertext
 crosses platforms in both directions — a browser-made link decrypted and inflated by the JVM, a
 JVM-made one opened by the browser.*
+
+### What a phone can afford (2026-08-26)
+
+Reported from a real phone: the desk crackled continuously on a three-channel mix that the Android
+app plays cleanly. It was not clipping — the master bus peaks at −3.2 dBFS with that mix — and not
+the server, which sits at 1.6% CPU relaying it. It was the audio thread not finishing its work in
+time, and the graph was asking for more than it needed:
+
+- **A flat isolator still ran.** Eight biquads per channel, reconstructing a signal they were handed
+  unchanged, because the bands sat at unity rather than being unhooked. Every channel of a default
+  mix is flat, so that was 24 filters doing nothing. They are now bypassed until a band moves, and
+  crossfaded in over 20 ms so the switch is not a click.
+- **The reverb tail was 2.6 seconds.** Measured here, that convolution cost **3.5× the entire
+  eight-filter isolator** — the single most expensive thing on the desk. Now 1.8 s, still plainly a
+  big room.
+- **The recording tap was always connected.** A `MediaStreamAudioDestinationNode` pulls the whole
+  graph into a WebRTC track every render quantum whether or not anyone is recording. It is now
+  opened when a take starts and closed when it ends.
+- **Meters ran at 60 fps.** 25 is past the point anyone can read a meter, and the difference is
+  main-thread time that the scrolling wanted.
+
+Together, **53% less audio-thread work** for that mix — 3.46% of real time down to 1.61% on a
+laptop, which is the share of a phone's core that was the problem. If it ever crackles again, look
+at whether the channel labels flicker to *Connecting…*: that is the network underrunning a media
+element, which is a different fault with a different fix.
+
+### The desk on a phone
+
+Two things made the expanded desk feel stuck, both reported from a phone and both real:
+
+- **The faders ate the scroll.** Each strip on a phone is mostly a full-width range input, so a
+  thumb dragging up to reach channel three landed on a fader, which swallowed the gesture. The
+  faders now carry `touch-action: pan-y`: sideways is the fader's axis and belongs to it, up and
+  down belongs to the list behind it.
+- **The height was budgeted in `vh`.** On a phone `vh` means the viewport with the address bar
+  hidden, so the desk was taller than the visible screen until you scrolled the bar away. It is
+  `dvh` now, and a fade at the bottom of the list says there is more below.
 
 ## What the web version does not have
 

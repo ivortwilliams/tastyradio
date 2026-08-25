@@ -1306,10 +1306,40 @@ button:disabled {
      * Four stacked channels would push the page above the desk to nothing, so the strips get a
      * ceiling and scroll *vertically* past it — the direction a phone already scrolls, rather than
      * the sideways swipe this layout exists to get rid of.
+     *
+     * `dvh`, not `vh`: `vh` on a phone means the viewport with the address bar *hidden*, so a desk
+     * budgeted in `vh` is taller than the screen you can actually see until you scroll the bar
+     * away. That is how three channels ended up with their bottom half under the browser chrome.
      */
-    max-height: 38vh;
+    max-height: 40dvh;
     overflow-y: auto;
     overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    /* The list scrolls under a thumb; the faders inside it take horizontal drags. See .fader. */
+    touch-action: pan-y;
+    scrollbar-width: thin;
+  }
+
+  /*
+   * There is more below — say so.
+   *
+   * A stack of channel strips with the third one cut off by the edge of a panel looks like the end
+   * of the list rather than the middle of it, and the fader that fills each row means there is no
+   * obvious thing to grab and pull. The fade is the hint that pulling is worth trying.
+   *
+   * Only from the third strip, because that is the first count that overflows the ceiling above —
+   * a fade under a list that ends there is just a smudge on the last card.
+   */
+  .strips:has(.strip:nth-child(3))::after {
+    content: '';
+    position: sticky;
+    bottom: -1px;
+    display: block;
+    height: 18px;
+    margin-top: -18px;
+    flex: 0 0 auto;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--bg-deep));
   }
 
   /* A slim invitation, not another full card. */
@@ -1399,6 +1429,15 @@ button:disabled {
     appearance: auto;
     width: 100%;
     height: 28px;
+    /*
+     * The fader takes sideways drags; up and down belong to the list behind it.
+     *
+     * On a phone each strip is mostly fader, so a thumb that wants to reach channel three lands on
+     * one of these — and a range input swallows the gesture, which is why the desk felt like it
+     * would not scroll. `pan-y` hands vertical movement back to the scroller and keeps horizontal
+     * movement for the fader, which is the axis it actually moves on.
+     */
+    touch-action: pan-y;
   }
 
   /* --- tone folds away; it is the part you set once and leave */

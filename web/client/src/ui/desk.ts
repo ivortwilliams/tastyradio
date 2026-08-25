@@ -52,7 +52,7 @@ export class Desk {
     private readonly onSaveMix: (channels: Channel[]) => void,
     private readonly onAddStation: () => void,
   ) {
-    this.recorder = new Recorder(mixer.recordTap.stream);
+    this.recorder = new Recorder(mixer);
 
     this.masterAnalyser = mixer.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
@@ -420,9 +420,18 @@ export class Desk {
   /**
    * One animation frame loop for every meter, and only while something is playing. Four separate
    * intervals ticking against an idle desk is how a browser tab starts costing battery.
+   *
+   * Capped at 25 frames a second. A meter is a rough indication of loudness — nobody reads it at 60
+   * fps — and on a phone the difference is main-thread time that the audio and the scrolling both
+   * want. `requestAnimationFrame` still drives it, so a hidden tab stops paying for meters at all.
    */
   private startMeters(): void {
-    const tick = () => {
+    const interval = 1000 / 25;
+    let last = 0;
+    const tick = (at: number) => {
+      this.meterHandle = requestAnimationFrame(tick);
+      if (at - last < interval) return;
+      last = at;
       const channels = this.mixer.channels;
       if (channels.length > 0) {
         for (const channel of channels) {
@@ -435,7 +444,6 @@ export class Desk {
       } else {
         setMeter(this.masterMeter, 0);
       }
-      this.meterHandle = requestAnimationFrame(tick);
     };
     this.meterHandle = requestAnimationFrame(tick);
   }

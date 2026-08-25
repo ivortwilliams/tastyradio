@@ -36,6 +36,16 @@ const DELAY_FEEDBACK_RANGE = 0.55;
 /** How much dry signal a full-wet reverb pulls back, so the source stays present. */
 const DRY_DUCK = 0.4;
 
+/**
+ * How long the reverb tail is, and the most expensive number in this file.
+ *
+ * Convolution cost scales with it, and measured in this browser a 2.6-second tail cost **3.5× the
+ * entire eight-filter isolator** — the single heaviest thing the desk asks the audio thread to do.
+ * A phone doing that for a channel, on top of three streams being decoded, is where the crackling
+ * on mobile came from. 1.8 seconds is still plainly a big room and costs a third less.
+ */
+const REVERB_SECONDS = 1.8;
+
 export interface Tone {
   /** Band positions, −1 (killed) … 0 (unity) … +1 (boosted). */
   low: number;
@@ -81,7 +91,7 @@ export function amplitudeFor(fader: number): number {
  * which is the same idea done properly and costs less. One buffer is shared across channels; the
  * per-channel wet gain is what the reverb control actually moves.
  */
-function makeImpulseResponse(ctx: BaseAudioContext, seconds = 2.6, decay = 2.6): AudioBuffer {
+function makeImpulseResponse(ctx: BaseAudioContext, seconds = REVERB_SECONDS, decay = 2.6): AudioBuffer {
   const rate = ctx.sampleRate;
   const length = Math.floor(rate * seconds);
   const buffer = ctx.createBuffer(2, length, rate);
@@ -137,6 +147,11 @@ export class ChannelGraph {
   private readonly highGain: GainNode;
   private readonly toneSum: GainNode;
 
+  /** The heads of the three band chains, so the isolator can be unhooked when nothing is shaped. */
+  private readonly bandHeads: BiquadFilterNode[];
+  /** The straight-through path used while the isolator is unhooked. */
+  private readonly bypass: GainNode;
+
   private readonly delayNode: DelayNode;
   private readonly feedback: GainNode;
   private readonly delayWet: GainNode;
@@ -151,6 +166,8 @@ export class ChannelGraph {
 
   private delayActive = false;
   private reverbActive = false;
+  private isolatorActive = false;
+  private unhookTimer = 0;
 
   constructor(
     private readonly ctx: AudioContext,
@@ -174,15 +191,29 @@ export class ChannelGraph {
     this.highGain = ctx.createGain();
     this.toneSum = ctx.createGain();
 
-    this.source.connect(lowA).connect(lowB).connect(this.lowGain).connect(this.toneSum);
-    this.source
-      .connect(midHighA)
-      .connect(midHighB)
-      .connect(midLowA)
-      .connect(midLowB)
-      .connect(this.midGain)
-      .connect(this.toneSum);
-    this.source.connect(highA).connect(highB).connect(this.highGain).connect(this.toneSum);
+    // Built, wired to the sum, but not fed from the source yet — see [setTone]. Every band starts
+    // at zero so that hooking the isolator up is a fade rather than a jump.
+    this.lowGain.gain.value = 0;
+    this.midGain.gain.value = 0;
+    this.highGain.gain.value = 0;
+
+    lowA.connect(lowB).connect(this.lowGain).connect(this.toneSum);
+    midHighA.connect(midHighB).connect(midLowA).connect(midLowB).connect(this.midGain).connect(this.toneSum);
+    highA.connect(highB).connect(this.highGain).connect(this.toneSum);
+    this.bandHeads = [lowA, midHighA, highA];
+
+    /*
+     * The straight-through path, and the reason a phone can run four of these.
+     *
+     * Eight biquads per channel is most of what the desk asks of the audio thread, and a channel
+     * whose bands are all at unity is paying for them to reconstruct the signal it already had.
+     * So while the tone is flat the isolator is unhooked from the source entirely and this carries
+     * the signal instead. The two paths are crossfaded rather than switched, because a topology
+     * change under a running stream is a click.
+     */
+    this.bypass = ctx.createGain();
+    this.bypass.gain.value = 1;
+    this.source.connect(this.bypass).connect(this.toneSum);
 
     // --- delay. Dry passes straight through; the echo is added on top, as in the Kotlin.
     this.delayNode = ctx.createDelay(MAX_DELAY_MS / 1000);
@@ -223,9 +254,32 @@ export class ChannelGraph {
     const now = this.ctx.currentTime;
     const ramp = 0.02; // short, so a knob feels immediate without zipper noise
 
-    this.lowGain.gain.setTargetAtTime(bandGain(tone.low), now, ramp);
-    this.midGain.gain.setTargetAtTime(bandGain(tone.mid), now, ramp);
-    this.highGain.gain.setTargetAtTime(bandGain(tone.high), now, ramp);
+    // An isolator sitting at unity is eight filters rebuilding the signal they were handed, which
+    // is the most expensive thing on the desk that does nothing. Flat channels take the bypass.
+    const shaped = tone.low !== 0 || tone.mid !== 0 || tone.high !== 0;
+    if (shaped !== this.isolatorActive) {
+      window.clearTimeout(this.unhookTimer);
+      if (shaped) {
+        for (const head of this.bandHeads) this.source.connect(head);
+      } else {
+        // Unhooked only after the crossfade has finished, or the filters vanish mid-fade.
+        this.unhookTimer = window.setTimeout(() => {
+          if (this.isolatorActive) return;
+          for (const head of this.bandHeads) {
+            try {
+              this.source.disconnect(head);
+            } catch {
+              /* already unhooked */
+            }
+          }
+        }, 200);
+      }
+      this.isolatorActive = shaped;
+    }
+    this.bypass.gain.setTargetAtTime(shaped ? 0 : 1, now, ramp);
+    this.lowGain.gain.setTargetAtTime(shaped ? bandGain(tone.low) : 0, now, ramp);
+    this.midGain.gain.setTargetAtTime(shaped ? bandGain(tone.mid) : 0, now, ramp);
+    this.highGain.gain.setTargetAtTime(shaped ? bandGain(tone.high) : 0, now, ramp);
 
     const delayOn = tone.delay > 0.005;
     const reverbOn = tone.reverb > 0.005;
@@ -279,6 +333,7 @@ export class ChannelGraph {
   }
 
   dispose(): void {
+    window.clearTimeout(this.unhookTimer);
     try {
       this.source.disconnect();
       this.toneSum.disconnect();
