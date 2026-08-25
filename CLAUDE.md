@@ -97,7 +97,11 @@ Working today:
   decoded by the JVM and back, the phone's own link round-tripped through its own share sheet, and a
   link made on the live site opening the released build straight from a tap — `pm get-app-links`
   reporting `radio.truthseekersbyo.com: verified`, no chooser, both channels playing at 62/77% with
-  the 65% reverb intact.*
+  the 65% reverb intact.* *The short form verified the same four ways on 2026-08-26, against the live
+  site: the web Share button produced a 67-character link that reopened Ritual Gregorian at 62/77%
+  with its reverb; the emulator's share sheet produced one that opened on the live site; a link made
+  in the browser opened in the app; and the ciphertext crosses platforms both ways — a browser-made
+  link decrypted and inflated by the JVM, a JVM-made one opened by the browser.*
 - **Edit and remove stations**: long-press a row to change name, artwork (device photo picker) or
   stream URL; swipe left to remove, with confirmation.
 - **Settings that matter**: large buffer (~60s ahead, on by default), automatic index refresh
