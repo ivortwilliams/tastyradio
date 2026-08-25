@@ -24,6 +24,18 @@ import type { Station } from './types.js';
  * on the fragment, and claiming the whole domain would mean tapping any link to the site opened the
  * app instead of the site. `/m` is the one path the phone takes.
  *
+ * ## The short one
+ *
+ * ```
+ * https://radio.truthseekersbyo.com/s/<id>#<key>
+ * ```
+ *
+ * 67 characters instead of 376, because a link people won't paste is a link that doesn't work.
+ * `shortMixLink` encrypts the payload below, posts the ciphertext, and keeps the key in the
+ * fragment — so the server holds a blob it cannot open and the privacy above survives intact. It
+ * falls back to the long link whenever the server isn't there, which is the whole reason the long
+ * link stays: it needs nothing and nobody.
+ *
  * ## The payload
  * A marker character, then base64url:
  *
@@ -39,6 +51,9 @@ import type { Station } from './types.js';
 
 /** The path the phone claims. Everything after the `#` is the mix. */
 export const SHARE_PATH = '/m';
+
+/** The short form: `/s/<id>#<key>`. The phone claims this too, from the build that added it. */
+export const SHORT_PATH = '/s';
 
 /** The site links point at, regardless of where the page making them is served from. */
 const SHARE_ORIGIN = 'https://radio.truthseekersbyo.com';
@@ -135,6 +150,99 @@ export function payloadIn(href: string): string | null {
   // The tab hashes (`#mixes`, `#search`) live in the same place and are not payloads.
   if (/^[a-z]+$/.test(hash)) return null;
   return hash;
+}
+
+// ---------------------------------------------------------------- the short form
+
+/**
+ * The same mix, in about 67 characters: `https://radio.truthseekersbyo.com/s/<id>#<key>`.
+ *
+ * A two-channel mix is 376 characters in a `/m#…` link and a four-channel one is well past that.
+ * Pasted into a chat that is a wall of base64, and a wall of base64 is not a thing people send each
+ * other. So the payload goes to the server and the link carries the id.
+ *
+ * **What the server gets is ciphertext.** The key is generated here, used here, and put in the
+ * fragment — the one part of a URL that is never sent to anybody — so the row on the droplet is
+ * 300 bytes of noise to everyone including us, and the property the long link was built around
+ * survives the shortening. Whoever you send the link to has the key; the server never does.
+ *
+ * Anything that goes wrong — an old browser without `crypto.subtle`, a server that isn't there, a
+ * flaky connection — falls back to the long link, which needs nobody's help to work. A share button
+ * that fails is worse than a share button that produces a long link.
+ */
+export async function shortMixLink(name: string, channels: Shareable[]): Promise<string> {
+  const payload = await encodeMix(name, channels);
+  return (await shorten(payload)) ?? `${SHARE_ORIGIN}${SHARE_PATH}#${payload}`;
+}
+
+async function shorten(payload: string): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  try {
+    const secret = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await subtle.importKey('raw', secret, 'AES-GCM', false, ['encrypt']);
+    const sealed = new Uint8Array(
+      await subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(payload)),
+    );
+
+    const blob = new Uint8Array(iv.length + sealed.length);
+    blob.set(iv);
+    blob.set(sealed, iv.length);
+
+    const response = await fetch('/api/mix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ b: base64url(blob) }),
+    });
+    if (!response.ok) return null;
+    const { id } = (await response.json()) as { id?: string };
+    if (typeof id !== 'string' || id === '') return null;
+
+    return `${SHARE_ORIGIN}${SHORT_PATH}/${id}#${base64url(secret)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The id and key out of a short link — this page's own address, or a link pasted into a box.
+ *
+ * A regex rather than `new URL`, for the same reason `MixLink.fromText` uses one: links arrive
+ * wrapped in "sent from…" and typed-around, and the useful part is still in there.
+ */
+export function shortLinkIn(href: string): { id: string; key: string } | null {
+  const match = /\/s\/([A-Za-z0-9_-]{4,32})#([A-Za-z0-9_-]{20,64})/.exec(href);
+  return match ? { id: match[1], key: match[2] } : null;
+}
+
+/** Fetches a short-linked mix and opens it with the key from the fragment. */
+export async function fetchShortMix(id: string, key: string): Promise<SharedMix | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  try {
+    const response = await fetch(`/api/mix/${encodeURIComponent(id)}`);
+    if (!response.ok) return null;
+    const { b } = (await response.json()) as { b?: string };
+    const stored = unbase64url(String(b ?? ''));
+    const raw = unbase64url(key);
+    if (stored === null || raw === null || stored.length < 13) return null;
+
+    // Copied into arrays of their own: `atob` hands back a view whose buffer TypeScript will not
+    // promise isn't shared, and WebCrypto only takes the plain kind.
+    const blob = new Uint8Array(stored);
+    const secret = new Uint8Array(raw);
+
+    const material = await subtle.importKey('raw', secret, 'AES-GCM', false, ['decrypt']);
+    const opened = await subtle.decrypt(
+      { name: 'AES-GCM', iv: blob.slice(0, 12) },
+      material,
+      blob.slice(12),
+    );
+    return await decodeMix(new TextDecoder().decode(opened));
+  } catch {
+    return null;
+  }
 }
 
 function toWire(channel: Shareable): WireChannel {

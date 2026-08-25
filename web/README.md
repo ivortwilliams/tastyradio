@@ -28,6 +28,12 @@ SHA-256 fingerprint, and it is what lets a shared mix link — `/m#…` — open
 the browser. **Re-sign the APK with a different key and this file has to change**, or phones quietly
 stop claiming links. Nothing looks broken when that happens, which is the problem.
 
+**Short mix links go through here too.** `POST /api/mix` takes a blob and hands back an id;
+`GET /api/mix/<id>` gives it back, and sits in front of the access gate because what it returns is
+ciphertext — the key is in the link's fragment and never reaches us. One SQLite table in `DATA_DIR`,
+no expiry, 40 new links an hour per address. See [`server/src/mixstore.ts`](server/src/mixstore.ts)
+and [`docs/design/web.md`](../docs/design/web.md#the-short-link-added-2026-08-26).
+
 **The stream proxy is the reason a server exists at all.** A browser cannot put a cross-origin
 stream through Web Audio — the graph is tainted and outputs silence — and per-channel EQ, reverb,
 metering and recording are all Web Audio. It also fixes ICY metadata, playlist files, HLS, redirects
@@ -69,7 +75,7 @@ with the published copy.
 | Variable | Default | What |
 |---|---|---|
 | `PORT` | `8080` | |
-| `DATA_DIR` | `./data` | Where the station index lives |
+| `DATA_DIR` | `./data` | Where the station index and the short-link store live |
 | `ACCESS_CODE` | *(empty)* | One shared password. **Empty means the site is open — and so is the stream proxy.** |
 | `SESSION_SECRET` | derived from the code | Signs the access cookie |
 | `INDEX_URL` | the GitHub release asset | Empty disables refresh and uses whatever is on disk |

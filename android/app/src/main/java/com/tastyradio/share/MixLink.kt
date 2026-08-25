@@ -9,8 +9,14 @@ import com.tastyradio.playback.Mixer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.SecureRandom
 import java.util.zip.Deflater
 import java.util.zip.Inflater
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 
 /**
@@ -41,6 +47,18 @@ import kotlin.math.roundToInt
  * file needs updating, or phones quietly stop claiming the links and fall back to the browser.
  * Which is a soft landing rather than a break: the web desk opens the same link.
  *
+ * ## The short one
+ *
+ * ```
+ * https://radio.truthseekersbyo.com/s/<id>#<key>
+ * ```
+ *
+ * 67 characters instead of 300-odd, because a link people won't paste is a link that doesn't work.
+ * [shortLink] encrypts the payload below, posts the ciphertext, and keeps the key in the fragment —
+ * so the server holds a blob it cannot open and everything said above about privacy still holds. It
+ * falls back to the long link whenever the server can't be reached, which is why the long link
+ * stays: it needs nothing and nobody.
+ *
  * ## The payload
  * A marker character, then base64url:
  *
@@ -59,6 +77,9 @@ object MixLink {
 
     const val HOST = "radio.truthseekersbyo.com"
     const val PATH = "/m"
+
+    /** The short form: `/s/<id>#<key>`. Claimed by this build; older ones let the browser have it. */
+    const val SHORT_PATH = "/s"
 
     /** One station's place in a shared mix — everything the mixer needs to rebuild the channel. */
     data class Channel(
@@ -86,6 +107,111 @@ object MixLink {
 
         val json = root.toString().toByteArray(Charsets.UTF_8)
         return "d" + Base64.encodeToString(deflate(json), BASE64_FLAGS)
+    }
+
+    // ---------------------------------------------------------------- the short form
+
+    /**
+     * The same mix in about 67 characters: `https://radio.truthseekersbyo.com/s/<id>#<key>`.
+     *
+     * The long link is 300-odd characters of base64 and people don't paste those into a chat. This
+     * one is a link that looks like a link.
+     *
+     * **The server is handed ciphertext.** The key is made here, used here, and lives in the
+     * fragment — the part of a URL that is never sent anywhere — so the row on the server is a blob
+     * nobody including us can open, and the privacy the long link was built around is still true of
+     * this one. `web/server/src/mixstore.ts` is the other end.
+     *
+     * Falls back to the long link on any failure: no network, server down, or the site's access
+     * code turned on (this phone has no cookie for it, so shortening would 401). A share button
+     * that produces a long link is fine; a share button that produces nothing is not.
+     *
+     * **Blocking — call it off the main thread.**
+     */
+    fun shortLink(name: String, channels: List<Channel>): String {
+        val payload = encode(name, channels)
+        return shorten(payload) ?: "https://$HOST$PATH#$payload"
+    }
+
+    private fun shorten(payload: String): String? = try {
+        val random = SecureRandom()
+        val secret = ByteArray(16).also(random::nextBytes)
+        val iv = ByteArray(12).also(random::nextBytes)
+
+        val cipher = Cipher.getInstance(AES_GCM)
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(secret, "AES"), GCMParameterSpec(TAG_BITS, iv))
+        // Java appends the tag to the ciphertext, which is exactly what WebCrypto expects to find
+        // there — the two sides never had to agree on anything beyond "iv first".
+        val blob = iv + cipher.doFinal(payload.toByteArray(Charsets.UTF_8))
+
+        val id = postMix(Base64.encodeToString(blob, BASE64_FLAGS))
+        if (id == null) null else "https://$HOST$SHORT_PATH/$id#${Base64.encodeToString(secret, BASE64_FLAGS)}"
+    } catch (error: Exception) {
+        null
+    }
+
+    /** The id and key out of a short link, wherever in the text it turned up. */
+    fun shortIn(text: String): Pair<String, String>? {
+        val match = SHORT_LINK.find(text) ?: return null
+        return match.groupValues[1] to match.groupValues[2]
+    }
+
+    /** Fetches a short-linked mix and opens it with the key from the fragment. **Blocking.** */
+    fun fetchShort(id: String, key: String): Shared? = try {
+        val blob = getMix(id)?.let { Base64.decode(it, BASE64_FLAGS) }
+        if (blob == null || blob.size < 29) {
+            null
+        } else {
+            val cipher = Cipher.getInstance(AES_GCM)
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(Base64.decode(key, BASE64_FLAGS), "AES"),
+                GCMParameterSpec(TAG_BITS, blob, 0, 12),
+            )
+            decode(String(cipher.doFinal(blob, 12, blob.size - 12), Charsets.UTF_8))
+        }
+    } catch (error: Exception) {
+        null
+    }
+
+    // ---------------------------------------------------------------- the wire
+
+    private fun postMix(blob: String): String? {
+        val connection = (URL("https://$HOST/api/mix").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 8_000
+            readTimeout = 8_000
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("User-Agent", USER_AGENT)
+        }
+        return try {
+            connection.outputStream.use { it.write(JSONObject().put("b", blob).toString().toByteArray()) }
+            if (connection.responseCode != 200) return null
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            JSONObject(body).optString("id").ifBlank { null }
+        } catch (error: Exception) {
+            null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun getMix(id: String): String? {
+        val connection = (URL("https://$HOST/api/mix/$id").openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8_000
+            readTimeout = 8_000
+            setRequestProperty("User-Agent", USER_AGENT)
+        }
+        return try {
+            if (connection.responseCode != 200) return null
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            JSONObject(body).optString("b").ifBlank { null }
+        } catch (error: Exception) {
+            null
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun toWire(channel: Channel): JSONObject {
@@ -125,13 +251,18 @@ object MixLink {
      * often as they arrive as taps, and those apps love to open a link in their own browser — from
      * which "Share → Tasty Radio" is the way out.
      */
-    fun from(intent: Intent?): Shared? {
-        val raw = when (intent?.action) {
-            Intent.ACTION_VIEW -> intent.dataString
-            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
-            else -> null
-        } ?: return null
-        return fromText(raw)
+    fun from(intent: Intent?): Shared? = textIn(intent)?.let(::fromText)
+
+    /**
+     * The text a mix might be hiding in: a tapped link, or a link shared *into* the app.
+     *
+     * Exposed because a short link can't be opened here — it needs a round trip to the server, and
+     * this is called on the main thread while an Activity is being created.
+     */
+    fun textIn(intent: Intent?): String? = when (intent?.action) {
+        Intent.ACTION_VIEW -> intent.dataString
+        Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+        else -> null
     }
 
     /**
@@ -215,9 +346,13 @@ object MixLink {
 
     // ---------------------------------------------------------------- handing it over
 
-    /** The system share sheet, which is how a link gets to a person. */
-    fun share(context: Context, name: String, channels: List<Channel>) {
-        val link = link(name, channels)
+    /**
+     * The system share sheet, which is how a link gets to a person.
+     *
+     * Takes the link rather than making one, because making one now means asking the server to
+     * shorten it and that cannot happen on the main thread. See [shortLink].
+     */
+    fun share(context: Context, name: String, link: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "$name — a Tasty Radio mix\n$link")
@@ -230,8 +365,13 @@ object MixLink {
 
     private const val BASE64_FLAGS = Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
 
+    private const val AES_GCM = "AES/GCM/NoPadding"
+    private const val TAG_BITS = 128
+    private const val USER_AGENT = "TastyRadio (+https://github.com/ivortwilliams/tastyradio)"
+
     private val LINK = Regex("""https?://\S*#([A-Za-z0-9_\-]{4,})""")
     private val BARE = Regex("""[A-Za-z0-9_\-]{8,}""")
+    private val SHORT_LINK = Regex("""/s/([A-Za-z0-9_\-]{4,32})#([A-Za-z0-9_\-]{20,64})""")
 
     /** Three decimals is finer than any fader you can move, and shorter than a float's full print. */
     private fun round(value: Float): Double = (value * 1000f).roundToInt() / 1000.0

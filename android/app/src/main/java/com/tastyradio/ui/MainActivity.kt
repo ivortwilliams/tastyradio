@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -19,6 +20,9 @@ import com.tastyradio.TastyRadioApp
 import com.tastyradio.playback.SoundscapeService
 import com.tastyradio.share.MixLink
 import com.tastyradio.ui.theme.TastyRadioTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -47,7 +51,7 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        sharedMix.value = MixLink.from(intent)
+        offerMix(intent)
 
         val app = application as TastyRadioApp
         setContent {
@@ -74,7 +78,27 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        MixLink.from(intent)?.let { sharedMix.value = it }
+        offerMix(intent)
+    }
+
+    /**
+     * Works out what mix, if any, an intent is carrying.
+     *
+     * A long link is right there in the fragment and is read synchronously. A short one is an id
+     * and a key — the mix itself is on the server — so it takes a round trip, and the offer appears
+     * a moment after the app does. Quietly nothing if the link is dead: a mix that fails to arrive
+     * shouldn't interrupt whatever is already playing with an error about it.
+     */
+    private fun offerMix(intent: Intent?) {
+        MixLink.from(intent)?.let {
+            sharedMix.value = it
+            return
+        }
+        val short = MixLink.textIn(intent)?.let(MixLink::shortIn) ?: return
+        lifecycleScope.launch {
+            val shared = withContext(Dispatchers.IO) { MixLink.fetchShort(short.first, short.second) }
+            if (shared != null) sharedMix.value = shared
+        }
     }
 
     /**

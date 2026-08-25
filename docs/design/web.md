@@ -268,10 +268,43 @@ with `deflate-raw` is the browser's name for what `Deflater(level, nowrap = true
 rather than a mismatch. The full reasoning is in
 [`soundscape.md`](soundscape.md#sharing-a-mix-built-2026-08-20).
 
-The server's only part in this is `/.well-known/assetlinks.json`, served before the SPA fallback
+The server's other part in this is `/.well-known/assetlinks.json`, served before the SPA fallback
 gets it, carrying the Android release key's fingerprint so a tapped link opens the app without an
 "open with?" dialog. It is public even when the access code is on, because Google's verifier is not
 going to type a password.
+
+### The short link (added 2026-08-26)
+
+A two-channel mix is 376 characters of link and a four-channel one is worse. It works, and nobody
+sends it — a wall of base64 doesn't look like something you'd click. So there is a second shape:
+
+```
+https://radio.truthseekersbyo.com/s/<id>#<key>       67 characters
+```
+
+The client encrypts the payload above with **AES-GCM** under a key it generates, posts the
+ciphertext to `POST /api/mix`, and puts the key in the **fragment**. So the server stores a blob it
+cannot read, indexed by an id that is no use without the other half of the link — the privacy the
+long form was built around survives being shortened, which is the only reason this was worth
+building rather than a plain redirect table.
+
+- [`mixstore.ts`](../../web/server/src/mixstore.ts) is the whole store: one SQLite table in the
+  `/data` volume, 48 bits of id, no expiry. A mix is 300-odd bytes; ten thousand is three megabytes.
+- `GET /api/mix/<id>` sits **in front of the access gate** — what it returns is ciphertext, so
+  there is nothing there to protect, and behind the gate the page would have to pass a password
+  before it could learn what it was opening.
+- `POST /api/mix` is behind the gate and rate limited to 40/hour per address. An endpoint that
+  stores what you send it and hands back a URL is a pastebin if you let it be.
+- **Everything falls back to the long link.** No `crypto.subtle`, no network, gate turned on with a
+  phone that has no cookie for it — `shortMixLink` returns the `/m#…` form and the feature quietly
+  degrades to what it was. The long form stays exactly because it needs nothing and nobody.
+- Android claims `/s/` as an App Link alongside `/m`. Builds older than that hand it to the browser,
+  which opens the same mix on the web desk: a longer way round, not a break.
+
+*Verified 2026-08-26: the real client's Share button produced a 67-character link, opening it put
+both channels of Ritual Gregorian back on the desk at 62/77% with the 65% reverb; and the ciphertext
+crosses platforms in both directions — a browser-made link decrypted and inflated by the JVM, a
+JVM-made one opened by the browser.*
 
 ## What the web version does not have
 

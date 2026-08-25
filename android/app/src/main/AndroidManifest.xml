@@ -52,9 +52,14 @@
                 "open with?" dialog, because autoVerify checks this build's signing certificate
                 against https://radio.truthseekersbyo.com/.well-known/assetlinks.json.
 
-                Scoped to /m rather than the whole host on purpose: claiming everything would mean a
-                link to the website itself opened the app instead of the site. A phone without the
-                app installed follows the same link to the web desk, which plays the same mix.
+                Scoped to /m and /s/ rather than the whole host on purpose: claiming everything
+                would mean a link to the website itself opened the app instead of the site. A phone
+                without the app installed follows the same link to the web desk, which plays the
+                same mix.
+
+                /s/ is the short form — the mix is on the server and the key to it is in the
+                fragment. Builds older than this one don't claim it and hand it to the browser,
+                which opens the same mix on the web desk. Nothing to fix, just a longer way round.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -64,6 +69,10 @@
                     android:scheme="https"
                     android:host="radio.truthseekersbyo.com"
                     android:pathPrefix="/m" />
+                <data
+                    android:scheme="https"
+                    android:host="radio.truthseekersbyo.com"
+                    android:pathPrefix="/s/" />
             </intent-filter>
 
             <!--

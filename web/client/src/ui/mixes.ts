@@ -1,5 +1,5 @@
 import type { Mixer, Preset } from '../audio/mixer.js';
-import { handOver, mixLink, type Shareable } from '../data/share.js';
+import { handOver, shortMixLink, type Shareable } from '../data/share.js';
 import * as store from '../data/store.js';
 import { artwork } from './artwork.js';
 import { confirmDialog, promptDialog } from './dialogs.js';
@@ -83,7 +83,7 @@ async function shareMix(name: string, channels: Shareable[]): Promise<void> {
     toast('That mix has lost its stations.');
     return;
   }
-  const link = await mixLink(name, channels);
+  const link = await shortMixLink(name, channels);
   const result = await handOver(name, link);
   if (result === 'copied') toast('Link copied — paste it to anyone.');
   else if (result === 'failed') toast(link);

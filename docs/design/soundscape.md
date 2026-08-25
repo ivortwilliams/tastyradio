@@ -246,6 +246,31 @@ already have and nothing duplicates.
 - **Web**: a share button on every mix card and *Share what is playing* on the Mixes page.
   `navigator.share` where there is one, the clipboard where there isn't.
 
+### The short link (added 2026-08-26)
+
+The reasoning above was right about everything except what a link looks like to the person receiving
+it. 376 characters of base64 is one line in a chat app the way a barcode is one line: technically
+true, and nobody clicks it. So both platforms now produce a second shape by default:
+
+```
+https://radio.truthseekersbyo.com/s/<id>#<key>
+```
+
+**The key stays in the fragment, so the decision above survives.** The client encrypts the payload
+under a key it generates, posts only the ciphertext, and the server files it under a random id. What
+sits on the droplet is a blob nobody can open — us included — and the id alone is worthless without
+the fragment that never left the sender's phone. No accounts, no user data, nothing readable in a
+log: the same promise as before, at a fifth of the length. It costs the *nothing to keep alive* half
+of it, which is the honest trade — a short link needs a server, and the long form remains as the
+fallback for exactly that reason. Anything that goes wrong — offline, server down, access code on —
+produces the `/m#…` link instead, which needs nothing and nobody.
+
+Details, endpoints and rate limits in [`web.md`](web.md#the-short-link-added-2026-08-26);
+[`mixstore.ts`](../../web/server/src/mixstore.ts) is the store, `shortLink` in
+[`MixLink.kt`](../../android/app/src/main/java/com/tastyradio/share/MixLink.kt) and `shortMixLink` in
+[`share.ts`](../../web/client/src/data/share.ts) are the two clients. Android claims `/s/` as an App
+Link alongside `/m`; older builds hand it to the browser, which opens the same mix on the web desk.
+
 ---
 
 ## UI: the mixer

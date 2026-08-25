@@ -9,6 +9,7 @@ import { handleArtwork } from './artwork.js';
 import { subscribe, forgetChannel } from './events.js';
 import { reportClick } from './radiobrowser.js';
 import { gateEnabled, isAuthed, checkCode, grantCookie } from './auth.js';
+import * as mixstore from './mixstore.js';
 
 /**
  * The whole server: a stream proxy, a search API over the station index, and the static client.
@@ -51,6 +52,35 @@ async function readBody(req: http.IncomingMessage, limit = 1024 * 1024): Promise
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+/** Who is asking, as far as Caddy knows. Only ever used to rate limit, never stored. */
+function clientIp(req: http.IncomingMessage): string {
+  const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+  return forwarded || req.socket.remoteAddress || 'unknown';
+}
+
+/**
+ * A ceiling on short links per address per hour.
+ *
+ * Sharing a mix is a thing you do a handful of times a day at the very most, so this is invisible
+ * to anyone using the app and a wall to anything treating it as free storage.
+ */
+const SHARES_PER_HOUR = 40;
+const shareBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function allowShare(ip: string): boolean {
+  const now = Date.now();
+  if (shareBuckets.size > 5000) {
+    for (const [key, bucket] of shareBuckets) if (bucket.resetAt <= now) shareBuckets.delete(key);
+  }
+  const bucket = shareBuckets.get(ip);
+  if (!bucket || bucket.resetAt <= now) {
+    shareBuckets.set(ip, { count: 1, resetAt: now + 3_600_000 });
+    return true;
+  }
+  bucket.count += 1;
+  return bucket.count <= SHARES_PER_HOUR;
 }
 
 /** True when the request reached us over TLS, so the access cookie can be marked Secure. */
@@ -115,6 +145,25 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/healthz') {
       json(res, 200, { ok: true, index: indexManager.status().total });
+      return;
+    }
+
+    /*
+     * Resolving a short mix link, deliberately in front of the gate.
+     *
+     * What comes back is ciphertext: the key that opens it is in the fragment of the link, which
+     * never left the sender's phone. So there is nothing here to protect with a password, and
+     * putting one in front of it would mean the page had to pass the gate *before* it could even
+     * learn what mix it was opening. Whether the recipient can then play it is the gate's business,
+     * same as it has always been.
+     */
+    if (pathname.startsWith('/api/mix/') && (req.method === 'GET' || req.method === undefined)) {
+      const blob = mixstore.get(pathname.slice('/api/mix/'.length));
+      if (!blob) {
+        json(res, 404, { error: 'no such mix' });
+        return;
+      }
+      json(res, 200, { b: blob.toString('base64url') });
       return;
     }
 
@@ -253,6 +302,30 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/click/') && req.method === 'POST') {
       void reportClick(pathname.slice('/api/click/'.length));
       json(res, 202, { ok: true });
+      return;
+    }
+
+    // ---------------------------------------------------------------- sharing
+
+    /*
+     * Shortening a mix link. The body is already encrypted — see `mixstore.ts` — so this is a blob
+     * in, an id out, and we never learn which stations went into it.
+     *
+     * Behind the gate, and rate limited on top: an endpoint that stores what you send it and hands
+     * back a URL is a pastebin if you let it be, and this one runs on a $6 droplet.
+     */
+    if (pathname === '/api/mix' && req.method === 'POST') {
+      if (!allowShare(clientIp(req))) {
+        json(res, 429, { error: 'too many links, slow down' });
+        return;
+      }
+      const body = JSON.parse((await readBody(req, 64 * 1024)) || '{}') as { b?: string };
+      const blob = Buffer.from(String(body.b ?? ''), 'base64url');
+      if (blob.length === 0 || blob.length > mixstore.MAX_BLOB_BYTES) {
+        json(res, 400, { error: 'bad mix' });
+        return;
+      }
+      json(res, 200, { id: mixstore.put(blob) });
       return;
     }
 

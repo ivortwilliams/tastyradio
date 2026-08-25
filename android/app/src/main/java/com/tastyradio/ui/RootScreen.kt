@@ -1,5 +1,6 @@
 package com.tastyradio.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +39,9 @@ import com.tastyradio.record.Recorder
 import com.tastyradio.search.SearchRepository
 import com.tastyradio.share.MixLink
 import com.tastyradio.update.Updater
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -152,7 +156,8 @@ fun RootScreen(
                     onTone = mixer::setTone,
                     onSaveMix = { showSaveMix = true },
                     onShareMix = {
-                        MixLink.share(
+                        shareMix(
+                            scope,
                             context,
                             liveMixName ?: channels.joinToString(" + ") { it.station.name },
                             channels.map {
@@ -268,7 +273,7 @@ fun RootScreen(
                     if (channels.isEmpty()) {
                         notify("None of that mix's stations are in your collection any more.")
                     } else {
-                        MixLink.share(context, entry.mix.name, channels)
+                        shareMix(scope, context, entry.mix.name, channels)
                     }
                 },
                 onRename = { mix, name ->
@@ -491,4 +496,22 @@ fun RootScreen(
     // Last, so it sits above everything else: an update offer is the one thing worth interrupting
     // for, and it only ever appears when there is genuinely a newer build.
     UpdatePrompt(updater)
+}
+
+/**
+ * Hands a mix over as a link.
+ *
+ * Off the main thread because shortening asks the server for an id — see [MixLink.shortLink], which
+ * falls back to the long link if that doesn't work, so this always ends in a share sheet.
+ */
+private fun shareMix(
+    scope: CoroutineScope,
+    context: Context,
+    name: String,
+    channels: List<MixLink.Channel>,
+) {
+    scope.launch {
+        val link = withContext(Dispatchers.IO) { MixLink.shortLink(name, channels) }
+        MixLink.share(context, name, link)
+    }
 }

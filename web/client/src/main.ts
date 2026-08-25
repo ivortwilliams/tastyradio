@@ -2,7 +2,15 @@ import './styles.css';
 import * as api from './api.js';
 import { Mixer } from './audio/mixer.js';
 import { download, share, sharingAvailable, formatDuration } from './data/recordings.js';
-import { decodeMix, payloadIn, SHARE_PATH, type SharedMix } from './data/share.js';
+import {
+  decodeMix,
+  fetchShortMix,
+  payloadIn,
+  SHARE_PATH,
+  SHORT_PATH,
+  shortLinkIn,
+  type SharedMix,
+} from './data/share.js';
 import * as store from './data/store.js';
 import { Desk } from './ui/desk.js';
 import { addStationDialog, gateDialog, sharedMixDialog } from './ui/dialogs.js';
@@ -167,13 +175,26 @@ async function start(): Promise<void> {
 /**
  * A mix somebody sent, read out of the address bar.
  *
- * Everything is in the fragment, so this never reached the server: opening a link is a private act
- * between the two of you. The payload is taken out of the URL either way — a mix is something you
- * either keep or don't, and leaving 300 characters of base64 in the address bar (and in their
- * history, and in whatever they bookmark) serves nobody.
+ * Two shapes, one landing. A long `/m#…` link carries the whole mix in the fragment and never
+ * touches the server at all; a short `/s/<id>#<key>` one fetches a blob the server cannot read and
+ * opens it with the key from the fragment. Either way the useful half travelled privately.
+ *
+ * The URL is emptied either way — a mix is something you either keep or don't, and leaving the link
+ * in the address bar (and in their history, and in whatever they bookmark) serves nobody.
  */
 async function incomingMix(): Promise<SharedMix | null> {
   const path = location.pathname.replace(/\/$/, '');
+
+  // A short link: the mix is on the server, the key to it is in the fragment, and neither half is
+  // any use without the other. Same landing as a long link once it's open.
+  if (path.startsWith(`${SHORT_PATH}/`)) {
+    const short = shortLinkIn(location.href);
+    const shared = short ? await fetchShortMix(short.id, short.key) : null;
+    history.replaceState(null, '', '/#mixes');
+    if (!shared) toast('That mix link has expired or is damaged — ask whoever sent it to send it again.');
+    return shared;
+  }
+
   if (path !== SHARE_PATH && !path.startsWith(`${SHARE_PATH}/`)) return null;
   const payload = payloadIn(location.href);
   if (payload === null) {

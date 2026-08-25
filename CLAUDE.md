@@ -82,13 +82,17 @@ Working today:
   channels by **stream URL**, not row id, and only seed when the mixes table is empty. *Verified on
   a clean install: three `AudioTrack`s from our uid all `state:started`, the reverbed channel's EQ
   lit.*
-- **Sharing a mix** (2026-08-20). A mix goes into a **link** — `radio.truthseekersbyo.com/m#<payload>`
-  — carrying the stations, faders, mutes, EQ, reverb and delay, with the payload in the **fragment**
-  so it never reaches a server. Same bytes on both platforms ([`MixLink.kt`](android/app/src/main/java/com/tastyradio/share/MixLink.kt)
+- **Sharing a mix** (2026-08-20, shortened 2026-08-26). A mix goes into a **link** —
+  `radio.truthseekersbyo.com/s/<id>#<key>`, 67 characters — carrying the stations, faders, mutes, EQ,
+  reverb and delay. The payload is **encrypted client-side** and the key lives in the **fragment**,
+  so the server stores a blob it cannot read and the mix still never reaches anybody's log. The
+  original long form (`/m#<payload>`, the whole mix in the fragment, no server at all) is still there
+  and is what every failure falls back to. Same bytes on both platforms ([`MixLink.kt`](android/app/src/main/java/com/tastyradio/share/MixLink.kt)
   / [`share.ts`](web/client/src/data/share.ts)): a link made on the phone opens in a browser and
-  back again. Android claims `/m` as a **verified App Link** (`/.well-known/assetlinks.json`, served
-  by the web server with the release key's fingerprint) and also accepts a link shared *into* it as
-  `text/plain`. A phone without the app follows the same link to the web desk. Arriving mixes land on
+  back again. Android claims `/m` and `/s/` as **verified App Links** (`/.well-known/assetlinks.json`,
+  served by the web server with the release key's fingerprint) and also accepts a link shared *into*
+  it as `text/plain`. Builds older than the short link don't claim `/s/` and hand it to the browser,
+  which opens the same mix on the web desk. A phone without the app follows the same link to the web desk. Arriving mixes land on
   the desk and ask before joining your collection. *Verified in all four directions: a browser-made link
   decoded by the JVM and back, the phone's own link round-tripped through its own share sheet, and a
   link made on the live site opening the released build straight from a tap — `pm get-app-links`
@@ -308,6 +312,7 @@ web/                         THE WEB VERSION — see docs/design/web.md
     search.ts / expand.ts    tokenise, expand, rank — ports of SearchRepository/QueryExpander
     indexer.ts               builds the index; runs in GitHub Actions, not on the server
     index-manager.ts         downloads the published index, swaps it in
+    mixstore.ts              short mix links — an id, and ciphertext we can't read
   client/src/
     audio/graph.ts           ChannelFilters.kt in Web Audio nodes
     audio/mixer.ts           Mixer.kt — the desk
